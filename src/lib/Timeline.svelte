@@ -2,18 +2,41 @@
   import { onMount, onDestroy } from 'svelte';
   import { calculateCelestialPositions } from './ephemeris.js';
   import Scritto from "@scritto/svelte";
+  import DateRangeSelector from './DateRangeSelector.svelte';
 
   let {
     lunarPositions = null,
     onTimeChange = null,
+    onDateRangeChange = null,
     hoveredCoords = null
   } = $props();
+
+  let initialStartDate = $derived.by(() => {
+    const d = lunarPositions?.timeRange?.startDate;
+    if (!d) return '';
+    const date = typeof d === 'string' ? new Date(d) : d;
+    if (isNaN(date.getTime())) return '';
+    const pad = (n) => String(n).padStart(2, '0');
+    return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}`;
+  });
+
+  let initialEndDate = $derived.by(() => {
+    const d = lunarPositions?.timeRange?.endDate;
+    if (!d) return '';
+    const date = typeof d === 'string' ? new Date(d) : d;
+    if (isNaN(date.getTime())) return '';
+    const pad = (n) => String(n).padStart(2, '0');
+    return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}`;
+  });
 
   // Reactive state
   let currentPlayheadIndex = $state(240);
   let currentPlayheadTime = $state('');
   let isDragging = $state(false);
   let trackElement = $state(null);
+  let scrollViewport = $state(null);
+  let timelineScale = $state(1);
+  let previousScale = 1;
   let lastDatasetRef = null;
 
   // Derived dataset
@@ -199,7 +222,7 @@
 
     list.sort((a, b) => a.start - b.start || a.rank - b.rank);
 
-    const thresholdSteps = 45;
+    const thresholdSteps = Math.max(10, Math.round(45 / timelineScale));
     for (let i = 0; i < list.length; i++) {
       let stackLevel = 0;
       for (let j = 0; j < i; j++) {
@@ -236,7 +259,7 @@
 
     list.sort((a, b) => a.end - b.end || a.rank - b.rank);
 
-    const thresholdSteps = 35;
+    const thresholdSteps = Math.max(8, Math.round(35 / timelineScale));
     for (let i = 0; i < list.length; i++) {
       let stackLevel = 0;
       for (let j = 0; j < i; j++) {
@@ -294,6 +317,44 @@
     };
   });
 
+  function keepPlayheadInView() {
+    if (!scrollViewport || !trackElement || timelineScale <= 1) return;
+    const pct = currentPlayheadIndex / Math.max(1, totalSteps - 1);
+    const playheadPx = pct * trackElement.offsetWidth;
+    const viewLeft = scrollViewport.scrollLeft;
+    const viewWidth = scrollViewport.clientWidth;
+    const margin = 80;
+    if (playheadPx < viewLeft + margin) {
+      scrollViewport.scrollLeft = Math.max(0, playheadPx - margin);
+    } else if (playheadPx > viewLeft + viewWidth - margin) {
+      scrollViewport.scrollLeft = playheadPx - viewWidth + margin;
+    }
+  }
+
+  $effect(() => {
+    const currentScale = timelineScale;
+    if (scrollViewport && currentScale !== previousScale) {
+      const playheadRatio = currentPlayheadIndex / Math.max(1, totalSteps - 1);
+      const viewportWidth = scrollViewport.clientWidth;
+      const newTotalWidth = viewportWidth * currentScale;
+      const targetScroll = playheadRatio * newTotalWidth - viewportWidth / 2;
+      scrollViewport.scrollLeft = Math.max(0, targetScroll);
+      previousScale = currentScale;
+    }
+  });
+
+  function handleTimelineWheel(e) {
+    if (timelineScale > 1 && scrollViewport) {
+      if (Math.abs(e.deltaX) > Math.abs(e.deltaY)) {
+        return;
+      }
+      if (e.deltaY !== 0) {
+        e.preventDefault();
+        scrollViewport.scrollLeft += e.deltaY;
+      }
+    }
+  }
+
   function setPlayheadIndex(targetIndex) {
     const idx = Math.min(totalSteps - 1, Math.max(0, targetIndex));
     if (idx === currentPlayheadIndex && currentPlayheadTime) return;
@@ -302,6 +363,8 @@
     const sunEntry = sunList[idx];
     const earthEntry = earthList[idx];
     currentPlayheadTime = sunEntry?.time || '';
+
+    keepPlayheadInView();
 
     if (onTimeChange && sunEntry && earthEntry) {
       const siteLat = dataset?.coordinates?.latitude ?? 0;
@@ -324,6 +387,7 @@
     const fraction = rect.width > 0 ? clampedX / rect.width : 0;
     const targetIndex = Math.min(totalSteps - 1, Math.max(0, Math.round(fraction * (totalSteps - 1))));
     setPlayheadIndex(targetIndex);
+    keepPlayheadInView();
   }
 
   let isMovingKeys = $state(false);
@@ -439,140 +503,187 @@
 </script>
 
 <div class="timeline-wrapper">
-  <!-- Top Labels & Badges Row (Stacked dynamically so higher labels sit on top of bottom ones) -->
-  <div class="badges-row">
-    {#each stackedBadges as b (b.key)}
-      {@const isUnderPlayhead = currentPlayheadIndex >= b.start && currentPlayheadIndex <= b.end}
-      {@const isExpanded = expandedBadgeKeys.has(b.key)}
-      <!-- svelte-ignore a11y_click_events_have_key_events -->
-      <!-- svelte-ignore a11y_no_static_element_interactions -->
-      <div
-        class="badge-item {b.className} {isUnderPlayhead ? 'is-under-playhead' : 'is-outside-playhead'}"
-        style="left: {b.leftPct}%; bottom: {b.bottomOffset}px; opacity: {isUnderPlayhead ? 1 : 0.5};"
-        onclick={(e) => {
-          e.stopPropagation();
-          toggleBadge(b.key);
-        }}
-        title="Click to toggle start and end dates"
-      >
-        <span class="badge-text">
-            <Scritto value={isExpanded ? b.dateText : b.statsText} />
-        </span>
-      </div>
-    {/each}
-
-    {#each stackedEndIndicators as item}
-      {@const isUnderPlayhead = currentPlayheadIndex >= item.start && currentPlayheadIndex <= item.end}
-      <div
-        class="end-tick {item.tickClass}"
-        style="left: {item.endPct}%; bottom: {item.bottomOffset}px; opacity: {isUnderPlayhead ? 1 : 0.5};"
-      ></div>
-    {/each}
+  <!-- Top Left Date Range Selector (Figma Node #33:176) -->
+  <div class="timeline-date-selector">
+    <DateRangeSelector
+      startDate={initialStartDate}
+      endDate={initialEndDate}
+      onChange={onDateRangeChange}
+    />
   </div>
 
-  <!-- Main Timeline Track Bar (height: 40px, snaps to hourly steps like a range slider) -->
+  <!-- Scrollable viewport for scalable timeline contents -->
+  <!-- svelte-ignore a11y_no_static_element_interactions -->
   <div
-    class="timeline-track"
-    bind:this={trackElement}
-    tabindex="0"
-    role="slider"
-    aria-label="Mission Timeline (Hourly Ephemeris)"
-    aria-valuemin="0"
-    aria-valuemax={totalSteps - 1}
-    aria-valuenow={currentPlayheadIndex}
-    aria-valuetext={currentPlayheadTime}
-    onkeydown={handleKeyDown}
-    onpointerdown={handlePointerDown}
-    onpointermove={handlePointerMove}
-    onpointerup={handlePointerUp}
-    onpointercancel={handlePointerCancel}
+    class="timeline-scroll-viewport"
+    bind:this={scrollViewport}
+    onwheel={handleTimelineWheel}
   >
-    <!-- Background Step Tick Lines (Matches hour count) -->
-    <div class="steps-grid">
-      {#each tickMarks as mark}
-        <div
-          class="step-line {mark.isDay ? 'is-day' : mark.isHalfDay ? 'is-half-day' : ''}"
-          style="left: {mark.pct}%;"
-        ></div>
-      {/each}
-    </div>
-
-    <!-- 1. DARK Intervals -->
-    {#each intervals.dark as darkRun}
-      {@const left = (darkRun.start / (totalSteps - 1)) * 100}
-      {@const width = ((darkRun.end - darkRun.start) / (totalSteps - 1)) * 100}
-      {@const overlapsComms = hasOverlap(darkRun, intervals.comms)}
-      <div
-        class="range-rect range-dark {overlapsComms ? 'is-bottom-half' : 'is-full'}"
-        style="left: {left}%; width: {width}%;"
-      ></div>
-    {/each}
-
-    <!-- 2. POWER Intervals (Yellow #FFD900: bottom half if overlapping with COMMS) -->
-    {#each intervals.power as powerRun}
-      {@const left = (powerRun.start / (totalSteps - 1)) * 100}
-      {@const width = ((powerRun.end - powerRun.start) / (totalSteps - 1)) * 100}
-      {@const overlapsComms = hasOverlap(powerRun, intervals.comms)}
-      <div
-        class="range-rect range-power {overlapsComms ? 'is-bottom-half' : 'is-full'}"
-        style="left: {left}%; width: {width}%;"
-      ></div>
-    {/each}
-
-    <!-- 3. COMMS Intervals (Blue #00B2FF: top half if overlapping with POWER or DARK) -->
-    {#each intervals.comms as commsRun}
-      {@const left = (commsRun.start / (totalSteps - 1)) * 100}
-      {@const width = ((commsRun.end - commsRun.start) / (totalSteps - 1)) * 100}
-      {@const overlapsPowerOrDark = hasOverlap(commsRun, intervals.power) || hasOverlap(commsRun, intervals.dark)}
-      <div
-        class="range-rect range-comms {overlapsPowerOrDark ? 'is-top-half' : 'is-full'}"
-        style="left: {left}%; width: {width}%;"
-      ></div>
-    {/each}
-
-    <!-- 4. OPTIMAL (OVERALL) Intervals: Always top layer, full height (40px, never changes height) -->
-    <!-- Semi-transparent luminous overlay with solid white framing so POWER and COMMS beneath remain clearly visible -->
-    {#each intervals.optimal as optRun}
-      {@const left = (optRun.start / (totalSteps - 1)) * 100}
-      {@const width = ((optRun.end - optRun.start) / (totalSteps - 1)) * 100}
-      <div
-        class="range-rect range-optimal is-full"
-        style="left: {left}%; width: {width}%;"
-      ></div>
-    {/each}
-
-    <!-- Draggable Snapping Playhead (Group 4 from Figma #26:46) -->
-    <!-- svelte-ignore a11y_no_static_element_interactions -->
     <div
-      class="playhead {isDragging || isMovingKeys ? 'is-dragging' : ''}"
-      style="left: {(currentPlayheadIndex / (totalSteps - 1)) * 100}%;"
-      onpointerdown={handlePointerDown}
+      class="timeline-scalable-content"
+      style="width: {timelineScale * 100}%;"
     >
-      <svg
-        class="playhead-svg"
-        viewBox="0 0 21 68"
-        width="21"
-        height="68"
-        fill="none"
-        xmlns="http://www.w3.org/2000/svg"
+      <!-- Top Labels & Badges Row (Stacked dynamically so higher labels sit on top of bottom ones) -->
+      <div class="badges-row">
+        {#each stackedBadges as b (b.key)}
+          {@const isUnderPlayhead = currentPlayheadIndex >= b.start && currentPlayheadIndex <= b.end}
+          {@const isExpanded = expandedBadgeKeys.has(b.key)}
+          <!-- svelte-ignore a11y_click_events_have_key_events -->
+          <!-- svelte-ignore a11y_no_static_element_interactions -->
+          <div
+            class="badge-item {b.className} {isUnderPlayhead ? 'is-under-playhead' : 'is-outside-playhead'}"
+            style="left: {b.leftPct}%; bottom: {b.bottomOffset}px; opacity: {isUnderPlayhead ? 1 : 0.5};"
+            onclick={(e) => {
+              e.stopPropagation();
+              toggleBadge(b.key);
+            }}
+            title="Click to toggle start and end dates"
+          >
+            <span class="badge-text">
+                <Scritto value={isExpanded ? b.dateText : b.statsText} />
+            </span>
+          </div>
+        {/each}
+
+        {#each stackedEndIndicators as item}
+          {@const isUnderPlayhead = currentPlayheadIndex >= item.start && currentPlayheadIndex <= item.end}
+          <div
+            class="end-tick {item.tickClass}"
+            style="left: {item.endPct}%; bottom: {item.bottomOffset}px; opacity: {isUnderPlayhead ? 1 : 0.5};"
+          ></div>
+        {/each}
+      </div>
+
+      <!-- Main Timeline Track Bar (height: 40px, snaps to hourly steps like a range slider) -->
+      <div
+        class="timeline-track"
+        bind:this={trackElement}
+        tabindex="0"
+        role="slider"
+        aria-label="Mission Timeline (Hourly Ephemeris)"
+        aria-valuemin="0"
+        aria-valuemax={totalSteps - 1}
+        aria-valuenow={currentPlayheadIndex}
+        aria-valuetext={currentPlayheadTime}
+        onkeydown={handleKeyDown}
+        onpointerdown={handlePointerDown}
+        onpointermove={handlePointerMove}
+        onpointerup={handlePointerUp}
+        onpointercancel={handlePointerCancel}
       >
-        <!-- Top Pin Marker Head & Downward triangle arrow (decorative part, transparent when idle) -->
-        <g class="playhead-decorative">
-          <rect width="21" height="28" fill="#FF2600" />
-          <path d="M0 28H21L10.5 38.5L0 28Z" fill="#FF2600" />
-        </g>
-        <!-- Vertical needle line through the 40px track (y: 28 to 68) -->
-        <rect class="playhead-needle" x="8" y="28" width="5" height="40" fill="#FF2600" />
-      </svg>
+        <!-- Background Step Tick Lines (Matches hour count) -->
+        <div class="steps-grid">
+          {#each tickMarks as mark}
+            <div
+              class="step-line {mark.isDay ? 'is-day' : mark.isHalfDay ? 'is-half-day' : ''}"
+              style="left: {mark.pct}%;"
+            ></div>
+          {/each}
+        </div>
+
+        <!-- 1. DARK Intervals -->
+        {#each intervals.dark as darkRun}
+          {@const left = (darkRun.start / (totalSteps - 1)) * 100}
+          {@const width = ((darkRun.end - darkRun.start) / (totalSteps - 1)) * 100}
+          {@const overlapsComms = hasOverlap(darkRun, intervals.comms)}
+          <div
+            class="range-rect range-dark {overlapsComms ? 'is-bottom-half' : 'is-full'}"
+            style="left: {left}%; width: {width}%;"
+          ></div>
+        {/each}
+
+        <!-- 2. POWER Intervals (Yellow #FFD900: bottom half if overlapping with COMMS) -->
+        {#each intervals.power as powerRun}
+          {@const left = (powerRun.start / (totalSteps - 1)) * 100}
+          {@const width = ((powerRun.end - powerRun.start) / (totalSteps - 1)) * 100}
+          {@const overlapsComms = hasOverlap(powerRun, intervals.comms)}
+          <div
+            class="range-rect range-power {overlapsComms ? 'is-bottom-half' : 'is-full'}"
+            style="left: {left}%; width: {width}%;"
+          ></div>
+        {/each}
+
+        <!-- 3. COMMS Intervals (Blue #00B2FF: top half if overlapping with POWER or DARK) -->
+        {#each intervals.comms as commsRun}
+          {@const left = (commsRun.start / (totalSteps - 1)) * 100}
+          {@const width = ((commsRun.end - commsRun.start) / (totalSteps - 1)) * 100}
+          {@const overlapsPowerOrDark = hasOverlap(commsRun, intervals.power) || hasOverlap(commsRun, intervals.dark)}
+          <div
+            class="range-rect range-comms {overlapsPowerOrDark ? 'is-top-half' : 'is-full'}"
+            style="left: {left}%; width: {width}%;"
+          ></div>
+        {/each}
+
+        <!-- 4. OPTIMAL (OVERALL) Intervals: Always top layer, full height (40px, never changes height) -->
+        <!-- Semi-transparent luminous overlay with solid white framing so POWER and COMMS beneath remain clearly visible -->
+        {#each intervals.optimal as optRun}
+          {@const left = (optRun.start / (totalSteps - 1)) * 100}
+          {@const width = ((optRun.end - optRun.start) / (totalSteps - 1)) * 100}
+          <div
+            class="range-rect range-optimal is-full"
+            style="left: {left}%; width: {width}%;"
+          ></div>
+        {/each}
+
+        <!-- Draggable Snapping Playhead (Group 4 from Figma #26:46) -->
+        <!-- svelte-ignore a11y_no_static_element_interactions -->
+        <div
+          class="playhead {isDragging || isMovingKeys ? 'is-dragging' : ''}"
+          style="left: {(currentPlayheadIndex / (totalSteps - 1)) * 100}%;"
+          onpointerdown={handlePointerDown}
+        >
+          <svg
+            class="playhead-svg"
+            viewBox="0 0 21 68"
+            width="21"
+            height="68"
+            fill="none"
+            xmlns="http://www.w3.org/2000/svg"
+          >
+            <!-- Top Pin Marker Head & Downward triangle arrow (decorative part, transparent when idle) -->
+            <g class="playhead-decorative">
+              <rect width="21" height="28" fill="#FF2600" />
+              <path d="M0 28H21L10.5 38.5L0 28Z" fill="#FF2600" />
+            </g>
+            <!-- Vertical needle line through the 40px track (y: 28 to 68) -->
+            <rect class="playhead-needle" x="8" y="28" width="5" height="40" fill="#FF2600" />
+          </svg>
+        </div>
+      </div>
     </div>
   </div>
 
   <!-- Bottom Info Row (below track bar) -->
   <div class="bottom-info-row">
-    <div class="bottom-left-time">
+    <div class="bottom-left-group">
+      <div class="bottom-left-time">
         <span>{formattedTime.dateStr}</span>
         <span>{formattedTime.timeStr}</span>
+      </div>
+
+      <div class="timeline-scale-control" title="Adjust timeline scale (zoom in/out)">
+        <span class="scale-label">SCALE</span>
+        <input
+          type="range"
+          class="scale-slider"
+          min="1"
+          max="6"
+          step="0.1"
+          bind:value={timelineScale}
+          onpointerdown={(e) => e.stopPropagation()}
+          aria-label="Timeline zoom scale"
+        />
+        <button
+          type="button"
+          class="scale-val"
+          onclick={() => (timelineScale = 1)}
+          title="Click to reset scale to 1.0x"
+        >
+          {timelineScale.toFixed(1)}x
+        </button>
+      </div>
     </div>
+
     <div class="bottom-right-hint {hoveredCoords ? 'is-coords' : ''}">
       {hoveredCoords ? (hoveredCoords.full || `${hoveredCoords.latStr}, ${hoveredCoords.lonStr}`) : 'Drag to rotate the Moon | Scroll to zoom'}
     </div>
@@ -591,6 +702,46 @@
     user-select: none;
     font-family: 'Space Grotesk', -apple-system, BlinkMacSystemFont, sans-serif;
     pointer-events: auto;
+  }
+
+  /* Top Left Date Range Selector positioned on the left above the timeline */
+  .timeline-date-selector {
+    position: absolute;
+    bottom: calc(100% + 14px);
+    left: 0;
+    z-index: 25;
+  }
+
+  /* Scrollable Viewport & Scalable Content */
+  .timeline-scroll-viewport {
+    position: relative;
+    width: 100%;
+    overflow-x: auto;
+    overflow-y: hidden;
+    scrollbar-width: thin;
+    scrollbar-color: rgba(255, 255, 255, 0.25) transparent;
+  }
+
+  .timeline-scroll-viewport::-webkit-scrollbar {
+    height: 4px;
+  }
+
+  .timeline-scroll-viewport::-webkit-scrollbar-track {
+    background: transparent;
+  }
+
+  .timeline-scroll-viewport::-webkit-scrollbar-thumb {
+    background: rgba(255, 255, 255, 0.25);
+    border-radius: 2px;
+  }
+
+  .timeline-scroll-viewport::-webkit-scrollbar-thumb:hover {
+    background: rgba(255, 255, 255, 0.5);
+  }
+
+  .timeline-scalable-content {
+    position: relative;
+    min-width: 100%;
   }
 
   /* Top Badges Row: Auto height to fit vertically stacked overlapping badges and end ticks */
@@ -809,19 +960,128 @@
     pointer-events: none;
   }
 
+  .bottom-left-group {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    pointer-events: auto;
+  }
+
   .bottom-left-time {
     display: inline-flex;
     align-items: center;
     gap: 8px;
     background-color: #ff2600;
     color: #ffffff;
-    padding: 3px 8px;
+    padding: 0 8px;
+    height: 22px;
+    box-sizing: border-box;
     border-radius: 1px;
     font-size: 13px;
     font-weight: 700;
-    line-height: 1;
+    line-height: 22px;
     letter-spacing: 0.5px;
     white-space: nowrap;
+  }
+
+  /* Timeline Scale / Zoom Slider Control (Matches height of .bottom-left-time) */
+  .timeline-scale-control {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    height: 22px;
+    padding: 0 8px;
+    background: rgba(0, 0, 0, 0.55);
+    backdrop-filter: blur(20px);
+    -webkit-backdrop-filter: blur(20px);
+    border: 1px solid rgba(255, 255, 255, 0.2);
+    border-radius: 1px;
+    box-sizing: border-box;
+    pointer-events: auto;
+    user-select: none;
+  }
+
+  .scale-label {
+    color: rgba(255, 255, 255, 0.6);
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: 0.8px;
+    line-height: 1;
+    white-space: nowrap;
+  }
+
+  .scale-slider {
+    -webkit-appearance: none;
+    appearance: none;
+    width: 70px;
+    height: 4px;
+    background: rgba(255, 255, 255, 0.25);
+    border-radius: 2px;
+    outline: none;
+    cursor: pointer;
+    margin: 0;
+    padding: 0;
+    border: none;
+    transition: background 0.15s ease;
+  }
+
+  .scale-slider:hover {
+    background: rgba(255, 255, 255, 0.4);
+  }
+
+  .scale-slider::-webkit-slider-thumb {
+    -webkit-appearance: none;
+    appearance: none;
+    width: 8px;
+    height: 12px;
+    background: #ff2600;
+    border-radius: 1px;
+    cursor: pointer;
+    box-shadow: 0 0 4px rgba(255, 38, 0, 0.5);
+    transition: transform 0.1s ease, background 0.15s ease;
+  }
+
+  .scale-slider::-webkit-slider-thumb:hover {
+    transform: scale(1.15);
+    background: #ff3d1a;
+  }
+
+  .scale-slider::-moz-range-thumb {
+    width: 8px;
+    height: 12px;
+    background: #ff2600;
+    border: none;
+    border-radius: 1px;
+    cursor: pointer;
+    box-shadow: 0 0 4px rgba(255, 38, 0, 0.5);
+  }
+
+  .scale-slider::-moz-range-track {
+    height: 4px;
+    background: rgba(255, 255, 255, 0.25);
+    border-radius: 2px;
+    border: none;
+  }
+
+  .scale-val {
+    background: none;
+    border: none;
+    color: #ffffff;
+    font-family: 'Space Grotesk', -apple-system, BlinkMacSystemFont, sans-serif;
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: 0.5px;
+    min-width: 28px;
+    text-align: right;
+    line-height: 1;
+    cursor: pointer;
+    padding: 0;
+    margin: 0;
+    transition: color 0.15s ease;
+  }
+
+  .scale-val:hover {
+    color: #ff2600;
   }
 
   .info-date,

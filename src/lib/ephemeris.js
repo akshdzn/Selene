@@ -147,16 +147,47 @@ export function formatLatLon(lat, lon) {
   return { latStr, lonStr, full: `${latStr}, ${lonStr}` };
 }
 
-export async function fetchCurrentLunarPositions(lat = 0, lon = 0) {
-  const { startTime, stopTime, hour, startDate, endDate, now } = getDateRange20Days();
+export async function fetchCurrentLunarPositions(lat = 0, lon = 0, customRange = null) {
+  let startTime, stopTime, hour, startDate, endDate, now;
+  const pad = (n) => String(n).padStart(2, '0');
+
+  if (customRange?.startDate && customRange?.endDate) {
+    now = new Date();
+    hour = now.getHours();
+    startDate = typeof customRange.startDate === 'string'
+      ? new Date(customRange.startDate + (customRange.startDate.length === 10 ? 'T00:00:00' : ''))
+      : customRange.startDate;
+    endDate = typeof customRange.endDate === 'string'
+      ? new Date(customRange.endDate + (customRange.endDate.length === 10 ? 'T23:00:00' : ''))
+      : customRange.endDate;
+
+    startTime = customRange.startTime || `${startDate.getFullYear()}-${pad(startDate.getMonth() + 1)}-${pad(startDate.getDate())} ${pad(startDate.getHours())}:00`;
+    stopTime = customRange.stopTime || `${endDate.getFullYear()}-${pad(endDate.getMonth() + 1)}-${pad(endDate.getDate())} ${pad(endDate.getHours())}:00`;
+  } else {
+    const range = getDateRange20Days();
+    startTime = range.startTime;
+    stopTime = range.stopTime;
+    hour = range.hour;
+    startDate = range.startDate;
+    endDate = range.endDate;
+    now = range.now;
+  }
+
   try {
     const data = await getLunarData(lat, lon, { startTime, stopTime });
     const sunList = Array.isArray(data.sun) ? data.sun : [];
     const earthList = Array.isArray(data.earth) ? data.earth : [];
 
-    // In a 20-day range with 1h steps, 10 days * 24h = index 240 corresponds to today at current hour
-    let currentIndex = 240;
+    // Find today's current hour in dataset if present; otherwise default to midpoint
+    let currentIndex = 0;
     if (sunList.length > 0) {
+      const todayIso = `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())} ${pad(hour)}:00`;
+      const foundIdx = sunList.findIndex((e) => e.time && e.time.startsWith(todayIso));
+      if (foundIdx >= 0) {
+        currentIndex = foundIdx;
+      } else {
+        currentIndex = Math.min(240, Math.floor(sunList.length / 2));
+      }
       if (currentIndex >= sunList.length) currentIndex = sunList.length - 1;
     }
 
@@ -180,24 +211,23 @@ export async function fetchCurrentLunarPositions(lat = 0, lon = 0) {
     };
   } catch (err) {
     console.warn('Ephemeris fetch fallback:', err);
-    // Build synthetic 481-hour fallback dataset (20 days * 24 hours + 1)
+    const totalSteps = Math.max(2, Math.round((endDate.getTime() - startDate.getTime()) / 3600000) + 1);
     const fallbackSun = [];
     const fallbackEarth = [];
-    const totalSteps = 481;
     const startMs = startDate.getTime();
 
     for (let i = 0; i < totalSteps; i++) {
       const stepDate = new Date(startMs + i * 3600000);
       const angle = (i * 0.5) % 360;
       // Solar elevation oscillates through lunar day/night (~29.5 day cycle)
-      const elev = 1.5 * Math.sin(((i - 120) / 480) * 2 * Math.PI);
-      const timeStr = `${stepDate.getFullYear()}-${String(stepDate.getMonth() + 1).padStart(2, '0')}-${String(stepDate.getDate()).padStart(2, '0')} ${String(stepDate.getHours()).padStart(2, '0')}:00`;
+      const elev = 1.5 * Math.sin(((i - 120) / Math.max(1, totalSteps - 1)) * 2 * Math.PI);
+      const timeStr = `${stepDate.getFullYear()}-${pad(stepDate.getMonth() + 1)}-${pad(stepDate.getDate())} ${pad(stepDate.getHours())}:00`;
 
       fallbackSun.push({ time: timeStr, angle, elevation: elev });
       fallbackEarth.push({ time: timeStr, angle: 45, elevation: 5.0 });
     }
 
-    const currentIndex = 240;
+    const currentIndex = Math.min(240, Math.floor(totalSteps / 2));
     const sunEntry = fallbackSun[currentIndex];
     const earthEntry = fallbackEarth[currentIndex];
     const { sunPos, earthPos, subSolar, subEarth } = calculateCelestialPositions(sunEntry, earthEntry, lat, lon);

@@ -77,4 +77,17 @@ assert.equal(pos.hour, hour, 'Hour matches system hour');
 assert.equal(pos.currentIndex, 240, 'Current index matches midpoint 240');
 assert(pos.dataset?.sun?.length >= 480, `Dataset has ~480+ hourly steps: ${pos.dataset?.sun?.length}`);
 
+// 6. Test fetchCurrentLunarPositions with Custom Date Range
+console.log('Testing custom date range ephemeris (2026-10-23 to 2026-11-01)...');
+const customPos = await fetchCurrentLunarPositions(apolloLat, apolloLon, {
+  startDate: '2026-10-23',
+  endDate: '2026-11-01'
+});
+assert.equal(customPos.success, true);
+assert(customPos.sunPos instanceof THREE.Vector3);
+assert(customPos.earthPos instanceof THREE.Vector3);
+assert(customPos.dataset?.sun?.length > 0);
+assert(customPos.timeRange?.startTime.startsWith('2026-10-23'));
+assert(customPos.timeRange?.stopTime.startsWith('2026-11-01'));
+
 console.log('All ephemeris tests passed successfully.');

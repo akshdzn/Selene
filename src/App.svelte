@@ -18,6 +18,7 @@
   let isCalculatingEphemeris = $state(false);
   let currentPlayheadTime = $state('');
   let hoveredCoords = $state(null);
+  let customDateRange = $state(null);
 
   onMount(async () => {
     lunarPositions = await fetchCurrentLunarPositions(lat, lon);
@@ -33,12 +34,29 @@
     isCalculatingEphemeris = true;
 
     try {
-      const newPositions = await fetchCurrentLunarPositions(lat, lon);
+      const newPositions = await fetchCurrentLunarPositions(lat, lon, customDateRange);
       lunarPositions = newPositions;
       activeLunarPositions = newPositions;
       currentPlayheadTime = newPositions?.sunEntry?.time || '';
     } catch (err) {
       console.error('Failed to calculate ephemeris for chosen coordinates:', err);
+    } finally {
+      isCalculatingEphemeris = false;
+    }
+  }
+
+  async function handleDateRangeChange(range) {
+    if (isCalculatingEphemeris) return;
+    customDateRange = range;
+    isCalculatingEphemeris = true;
+
+    try {
+      const newPositions = await fetchCurrentLunarPositions(lat, lon, customDateRange);
+      lunarPositions = newPositions;
+      activeLunarPositions = newPositions;
+      currentPlayheadTime = newPositions?.sunEntry?.time || '';
+    } catch (err) {
+      console.error('Failed to calculate ephemeris for date range:', err);
     } finally {
       isCalculatingEphemeris = false;
     }
@@ -91,6 +109,7 @@
       <Timeline
         {lunarPositions}
         onTimeChange={handlePlayheadChange}
+        onDateRangeChange={handleDateRangeChange}
         {hoveredCoords}
       />
     {/if}

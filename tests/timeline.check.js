@@ -277,4 +277,31 @@ assert.equal(powerDateText, 'POWER | NOV 16 2026 – NOV 25 2026');
 const darkDateText = formatRangeDateText('DARK', '2026-Nov-05 01:00', '2026-Nov-16 19:00');
 assert.equal(darkDateText, 'DARK | NOV 05 2026 – NOV 16 2026');
 
+// 8. Test Timeline X-Scale Logic & Dynamic Stacking Thresholds
+const getBadgeThreshold = (scale) => Math.max(10, Math.round(45 / scale));
+const getTickThreshold = (scale) => Math.max(8, Math.round(35 / scale));
+
+assert.equal(getBadgeThreshold(1), 45, 'At 1.0x scale, badge threshold is 45 steps');
+assert.equal(getTickThreshold(1), 35, 'At 1.0x scale, tick threshold is 35 steps');
+
+assert.equal(getBadgeThreshold(2), 23, 'At 2.0x scale, badge threshold halves to 23 steps');
+assert.equal(getTickThreshold(2), 18, 'At 2.0x scale, tick threshold halves to 18 steps');
+
+assert.equal(getBadgeThreshold(4.5), 10, 'At 4.5x scale, badge threshold clamps at min 10');
+assert.equal(getTickThreshold(4.5), 8, 'At 4.5x scale, tick threshold clamps at min 8');
+
+// Test Zoom Scroll Centering
+const calcTargetScroll = (playheadIdx, totalSteps, viewportWidth, scale) => {
+  const playheadRatio = playheadIdx / (totalSteps - 1);
+  const newTotalWidth = viewportWidth * scale;
+  return Math.max(0, playheadRatio * newTotalWidth - viewportWidth / 2);
+};
+
+// At 1.0x, target scroll is 0 (fully fits viewport)
+assert.equal(calcTargetScroll(240, 481, 1200, 1.0), 0);
+// At 2.0x (2400px wide), center playhead (at 50% = 1200px) is at scrollLeft = 1200 - 600 = 600
+assert.equal(calcTargetScroll(240, 481, 1200, 2.0), 600);
+// At 3.0x (3600px wide), playhead at 25% (idx 120) is at 900px, scrollLeft = 900 - 600 = 300
+assert.equal(calcTargetScroll(120, 481, 1200, 3.0), 300);
+
 console.log('All timeline logic and overlap checks passed successfully.');
