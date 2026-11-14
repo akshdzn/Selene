@@ -1,0 +1,11 @@
+{
+  "width": 1900,
+  "height": 1900,
+  "dtype": "int16",
+  "endian": "little",
+  "scale": 0.5,
+  "offset": 1737400.0,
+  "metersPerPixel": 320.0,
+  "projection": "polar stereographic, south pole, center lon 0",
+  "refRadiusKm": 1737.4
+}

@@ -22,3 +22,7 @@ dist-ssr
 *.njsproj
 *.sln
 *.sw?
+
+# Data files
+backend/LDEM_80S_80M.LBL
+backend/LDEM_80S_80M.IMG
