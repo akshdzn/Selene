@@ -1,0 +1,146 @@
+{
+  "coordinates": "degrees; latitude north-positive, longitude east-positive",
+  "flag_left_behind": "yes | no | unknown",
+  "flag_values": "standing | knocked_over | painted_on_probe | none_known | unverified",
+  "sites": [
+    {
+      "name": "Apollo 11", "country": "USA", "date": "1969-07-20", "type": "crewed_landing",
+      "lat": 0.674, "lon": 23.473,
+      "flag_left_behind": "yes",
+      "flag": "knocked_over",
+      "left_behind": ["Lunar module descent stage", "Passive seismometer", "Laser retroreflector"],
+      "note": "First humans on the Moon"
+    },
+    {
+      "name": "Apollo 12", "country": "USA", "date": "1969-11-19", "type": "crewed_landing",
+      "lat": -3.013, "lon": -23.422,
+      "flag_left_behind": "yes",
+      "flag": "standing",
+      "left_behind": ["Lunar module descent stage", "ALSEP instrument station"],
+      "note": "Landed beside Surveyor 3"
+    },
+    {
+      "name": "Apollo 14", "country": "USA", "date": "1971-02-05", "type": "crewed_landing",
+      "lat": -3.646, "lon": -17.472,
+      "flag_left_behind": "yes",
+      "flag": "standing",
+      "left_behind": ["Lunar module descent stage", "ALSEP instrument station", "Laser retroreflector", "Equipment cart (MET)", "Two golf balls"],
+      "note": "Fra Mauro highlands"
+    },
+    {
+      "name": "Apollo 15", "country": "USA", "date": "1971-07-30", "type": "crewed_landing",
+      "lat": 26.132, "lon": 3.633,
+      "flag_left_behind": "yes",
+      "flag": "standing",
+      "left_behind": ["Lunar module descent stage", "ALSEP instrument station", "Lunar rover", "Laser retroreflector", "Fallen Astronaut memorial"],
+      "note": "First lunar rover, Hadley Rille"
+    },
+    {
+      "name": "Apollo 16", "country": "USA", "date": "1972-04-21", "type": "crewed_landing",
+      "lat": -8.973, "lon": 15.501,
+      "flag_left_behind": "yes",
+      "flag": "standing",
+      "left_behind": ["Lunar module descent stage", "ALSEP instrument station", "Lunar rover", "Family photo (Charlie Duke)"],
+      "note": "Only highlands landing"
+    },
+    {
+      "name": "Apollo 17", "country": "USA", "date": "1972-12-11", "type": "crewed_landing",
+      "lat": 20.191, "lon": 30.772,
+      "flag_left_behind": "yes",
+      "flag": "standing",
+      "left_behind": ["Lunar module descent stage", "ALSEP instrument station", "Lunar rover", "Surface electrical properties experiment"],
+      "note": "Last crewed landing"
+    },
+
+    {
+      "name": "Surveyor 1", "country": "USA", "date": "1966-06-02", "type": "robotic_landing",
+      "lat": -2.475, "lon": -43.340,
+      "flag_left_behind": "no",
+      "flag": "none_known",
+      "left_behind": ["Entire Surveyor 1 lander"],
+      "note": "First US soft landing"
+    },
+    {
+      "name": "Surveyor 3", "country": "USA", "date": "1967-04-20", "type": "robotic_landing",
+      "lat": -3.016, "lon": -23.418,
+      "flag_left_behind": "no",
+      "flag": "none_known",
+      "left_behind": ["Surveyor 3 lander (some parts taken to Earth by Apollo 12)"],
+      "note": "Visited by Apollo 12"
+    },
+    {
+      "name": "Surveyor 5", "country": "USA", "date": "1967-09-11", "type": "robotic_landing",
+      "lat": 1.455, "lon": 23.194,
+      "flag_left_behind": "no",
+      "flag": "none_known",
+      "left_behind": ["Entire Surveyor 5 lander"],
+      "note": "Analysed lunar soil chemistry"
+    },
+    {
+      "name": "Surveyor 6", "country": "USA", "date": "1967-11-10", "type": "robotic_landing",
+      "lat": 0.474, "lon": -1.428,
+      "flag_left_behind": "no",
+      "flag": "none_known",
+      "left_behind": ["Entire Surveyor 6 lander"],
+      "note": "Hopped off the surface"
+    },
+    {
+      "name": "Surveyor 7", "country": "USA", "date": "1968-01-10", "type": "robotic_landing",
+      "lat": -40.981, "lon": -11.513,
+      "flag_left_behind": "no",
+      "flag": "none_known",
+      "left_behind": ["Entire Surveyor 7 lander"],
+      "note": "Tycho highlands; last Surveyor"
+    },
+
+    {
+      "name": "Odysseus (IM-1)", "country": "USA", "date": "2024-02-22", "type": "robotic_landing",
+      "lat": -80.13, "lon": 1.44,
+      "flag_left_behind": "unknown",
+      "flag": "unverified",
+      "left_behind": ["Entire Odysseus lander, on its side, with its payloads"],
+      "note": "Landed on its side"
+    },
+    {
+      "name": "Blue Ghost 1", "country": "USA", "date": "2025-03-02", "type": "robotic_landing",
+      "lat": 18.56, "lon": 61.81,
+      "flag_left_behind": "unknown",
+      "flag": "unverified",
+      "left_behind": ["Entire Blue Ghost lander with its 10 NASA payloads"],
+      "note": "Fully successful, Mare Crisium"
+    },
+    {
+      "name": "Athena (IM-2)", "country": "USA", "date": "2025-03-06", "type": "robotic_landing",
+      "lat": -84.791, "lon": 29.196,
+      "flag_left_behind": "unknown",
+      "flag": "unverified",
+      "left_behind": ["Entire Athena lander, on its side", "MAPP rover (never deployed)", "PRIME-1 drill suite"],
+      "note": "Southernmost landing; on its side"
+    },
+
+    {
+      "name": "Chandrayaan-1 Moon Impact Probe", "country": "India", "date": "2008-11-14", "type": "crash",
+      "lat": -89.55, "lon": -122.93,
+      "flag_left_behind": "yes",
+      "flag": "painted_on_probe",
+      "left_behind": ["Moon Impact Probe wreckage (not located)"],
+      "note": "Approximate; exact point unknown"
+    },
+    {
+      "name": "Chandrayaan-2 Vikram", "country": "India", "date": "2019-09-06", "type": "crash",
+      "lat": -70.881, "lon": 22.784,
+      "flag_left_behind": "unknown",
+      "flag": "unverified",
+      "left_behind": ["Vikram lander wreckage (scattered debris field)", "Pragyan rover (aboard Vikram, never deployed)"],
+      "note": "Tiranga Point"
+    },
+    {
+      "name": "Chandrayaan-3 Vikram", "country": "India", "date": "2023-08-23", "type": "robotic_landing",
+      "lat": -69.373, "lon": 32.319,
+      "flag_left_behind": "unknown",
+      "flag": "unverified",
+      "left_behind": ["Entire Vikram lander", "Entire Pragyan rover"],
+      "note": "Shiv Shakti Point"
+    }
+  ]
+}
