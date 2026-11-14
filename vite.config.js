@@ -10,6 +10,7 @@ const horizonsProxy = {
 // https://vite.dev/config/
 export default defineConfig({
   plugins: [svelte()],
+  assetsInclude: ['**/*.tif', '**/*.tiff'],
   server: {
     proxy: {
       '/api/horizons': horizonsProxy,

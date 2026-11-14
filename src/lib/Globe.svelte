@@ -2,7 +2,9 @@
 	import { onMount } from 'svelte';
 	import * as THREE from 'three';
 	import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
+	import UTIF from 'three/examples/jsm/libs/utif.module.js';
 	import moonUrl from '../assets/moon.webp';
+	import moonDisplacementUrl from '../assets/moon_displacement.tif';
 	import earthUrl from '../assets/earth.jpg';
 
 	let cursorRadius = $state(0.026);
@@ -291,7 +293,7 @@
 		const starSystem = createStarfield(2500);
 		scene.add(starSystem.group);
 
-		// 5. Visual Sun in the background (no directional light/shadows)
+		// 5. Visual Sun in the background and directional lighting
 		const sunPos = new THREE.Vector3(28, 12, -45);
 
 		const sunMesh = new THREE.Mesh(
@@ -315,6 +317,15 @@
 		sunGlow.scale.set(10, 10, 1);
 		scene.add(sunGlow);
 
+		// Directional sunlight from the Sun's position to illuminate the Moon & reveal surface displacement
+		const sunLight = new THREE.DirectionalLight(0xfffaed, 2.8);
+		sunLight.position.copy(sunPos);
+		scene.add(sunLight);
+
+		// Soft ambient light (earthshine & cosmic background) keeping unlit terrain navigably visible
+		const ambientLight = new THREE.AmbientLight(0xffffff, 0.18);
+		scene.add(ambientLight);
+
 		// 6. Background Earth (distant unlit textured sphere)
 		const earthPos = new THREE.Vector3(-14, 6, -24);
 		const earthTexture = textureLoader.load(earthUrl);
@@ -330,14 +341,107 @@
 		earth.rotation.y = 1.2;
 		scene.add(earth);
 
-		// 7. Hero Object: The Moon (100% visible, unlit flat texture, no shadows)
+		// 7. Hero Object: The Moon with displacement mapping and lighting
 		const moonTexture = textureLoader.load(moonUrl);
 		moonTexture.colorSpace = THREE.SRGBColorSpace;
 
-		const moonGeometry = new THREE.SphereGeometry(1.0, 128, 128);
-		const moonMaterial = new THREE.MeshBasicMaterial({
-			map: moonTexture
+		const moonGeometry = new THREE.SphereGeometry(1.0, 256, 256);
+		const moonMaterial = new THREE.MeshStandardMaterial({
+			map: moonTexture,
+			displacementScale: 0.001,
+			displacementBias: 0.0,
+			bumpScale: 0.5,
+			roughness: 0.85,
+			metalness: 0.0
 		});
+
+		// Load 32-bit floating point elevation TIFF (NASA LOLA ldem_4, values in km)
+		let moonDisplacementMap = null;
+		const fileLoader = new THREE.FileLoader();
+		fileLoader.setResponseType('arraybuffer');
+
+		// Anti-aliased elevation filter with trilinear float mipmaps
+		// ponytail: separable binomial blur removes single-pixel LOLA sensor spikes; CPU mipmaps enable hardware trilinear filtering on float textures without WebGL2 INVALID_OPERATION
+		function buildAntialiasedElevationMips(src, w, h) {
+			const tmp = new Float32Array(w * h);
+			const smoothed = new Float32Array(w * h);
+
+			// Horizontal pass (spherical longitude 360° wrap)
+			for (let y = 0; y < h; y++) {
+				const row = y * w;
+				for (let x = 0; x < w; x++) {
+					const left = row + ((x - 1 + w) % w);
+					const center = row + x;
+					const right = row + ((x + 1) % w);
+					tmp[center] = 0.25 * src[left] + 0.5 * src[center] + 0.25 * src[right];
+				}
+			}
+
+			// Vertical pass (clamped at poles)
+			for (let y = 0; y < h; y++) {
+				const topRow = Math.max(0, y - 1) * w;
+				const midRow = y * w;
+				const botRow = Math.min(h - 1, y + 1) * w;
+				for (let x = 0; x < w; x++) {
+					smoothed[midRow + x] = 0.25 * tmp[topRow + x] + 0.5 * tmp[midRow + x] + 0.25 * tmp[botRow + x];
+				}
+			}
+
+			// Downsample complete mipmap pyramid for trilinear anti-aliasing
+			const mips = [{ data: smoothed, width: w, height: h }];
+			let curr = smoothed, curW = w, curH = h;
+			while (curW > 1 || curH > 1) {
+				const nextW = Math.max(1, curW >> 1);
+				const nextH = Math.max(1, curH >> 1);
+				const next = new Float32Array(nextW * nextH);
+				for (let y = 0; y < nextH; y++) {
+					const y0 = Math.min(y * 2, curH - 1) * curW;
+					const y1 = Math.min(y * 2 + 1, curH - 1) * curW;
+					for (let x = 0; x < nextW; x++) {
+						const x0 = x * 2;
+						const x1 = Math.min(x0 + 1, curW - 1);
+						next[y * nextW + x] = 0.25 * (
+							curr[y0 + x0] + curr[y0 + x1] +
+							curr[y1 + x0] + curr[y1 + x1]
+						);
+					}
+				}
+				mips.push({ data: next, width: nextW, height: nextH });
+				curr = next;
+				curW = nextW;
+				curH = nextH;
+			}
+			return mips;
+		}
+
+		fileLoader.load(moonDisplacementUrl, (buffer) => {
+			const ifds = UTIF.decode(buffer);
+			UTIF.decodeImage(buffer, ifds[0]);
+			const ifd = ifds[0];
+			const f32 = new Float32Array(ifd.data.buffer.slice(ifd.data.byteOffset, ifd.data.byteOffset + ifd.data.byteLength));
+			const mips = buildAntialiasedElevationMips(f32, ifd.width, ifd.height);
+
+			moonDisplacementMap = new THREE.DataTexture(
+				mips[0].data,
+				ifd.width,
+				ifd.height,
+				THREE.RedFormat,
+				THREE.FloatType
+			);
+			moonDisplacementMap.mipmaps = mips;
+			moonDisplacementMap.wrapS = THREE.RepeatWrapping;
+			moonDisplacementMap.wrapT = THREE.ClampToEdgeWrapping;
+			moonDisplacementMap.minFilter = THREE.LinearMipmapLinearFilter;
+			moonDisplacementMap.magFilter = THREE.LinearFilter;
+			moonDisplacementMap.generateMipmaps = false;
+			moonDisplacementMap.flipY = true;
+			moonDisplacementMap.needsUpdate = true;
+
+			moonMaterial.displacementMap = moonDisplacementMap;
+			moonMaterial.bumpMap = moonDisplacementMap;
+			moonMaterial.needsUpdate = true;
+		});
+
 		const moon = new THREE.Mesh(moonGeometry, moonMaterial);
 		// Align near-side (0° lon) to initially face the camera
 		moon.rotation.y = -Math.PI / 2;
@@ -349,6 +453,7 @@
 			color: 0xffffff,
 			side: THREE.DoubleSide,
 			transparent: true,
+			depthTest: false,
 			depthWrite: false
 		});
 		const cursor = new THREE.Mesh(cursorGeo, cursorMat);
@@ -362,6 +467,7 @@
 			map: shadowTexture,
 			transparent: true,
 			opacity: cursorShadowOpacity,
+			depthTest: false,
 			depthWrite: false
 		});
 		const shadowMesh = new THREE.Mesh(shadowGeo, shadowMat);
@@ -377,6 +483,7 @@
 		const lineMat = new THREE.MeshBasicMaterial({
 			color: cursorLineColor,
 			transparent: true,
+			depthTest: false,
 			depthWrite: false
 		});
 		const line = new THREE.Mesh(lineGeo, lineMat);
@@ -467,6 +574,9 @@
 			moonGeometry.dispose();
 			moonMaterial.dispose();
 			moonTexture.dispose();
+			moonDisplacementMap?.dispose();
+			sunLight.dispose();
+			ambientLight.dispose();
 			earth.geometry.dispose();
 			earth.material.dispose();
 			earthTexture.dispose();
