@@ -803,7 +803,7 @@
 			color: 0xff2600,
 			side: THREE.DoubleSide,
 			transparent: true,
-			depthTest: false,
+			depthTest: true,
 			depthWrite: false
 		});
 		const selectedCursor = new THREE.Mesh(selCursorGeo, selCursorMat);
@@ -812,7 +812,7 @@
 		const selLineMat = new THREE.MeshBasicMaterial({
 			color: 0xff2600,
 			transparent: true,
-			depthTest: false,
+			depthTest: true,
 			depthWrite: false
 		});
 		const selLine = new THREE.Mesh(lineGeo, selLineMat);
