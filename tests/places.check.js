@@ -65,6 +65,20 @@ updatePlaceMarkersAnimation(markers, 1.5, null);
 assert.strictEqual(mareTranquillitatis.ringMesh.material.color.getHex(), 0x33e5ff, 'Unhovered marker must revert to cyan');
 console.log('✔ Animation and hover shine transition verified.');
 
+console.log('Testing Place Markers with Marker.svg Texture...');
+const mockTexture = new THREE.Texture();
+const markersWithTex = createPlaceMarkers(placesData.locations, 1.0, mockTexture);
+assert.strictEqual(markersWithTex.markers.length, 8);
+for (const m of markersWithTex.markers) {
+	assert(m.markerMesh instanceof THREE.Mesh, 'Must have markerMesh with texture');
+	assert.strictEqual(m.markerMesh.material.map, mockTexture, 'Must use provided marker texture');
+}
+updatePlaceMarkersAnimation(markersWithTex.markers, 1.0, markersWithTex.markers[0]);
+assert.strictEqual(markersWithTex.markers[0].markerMesh.material.color.getHex(), 0xffea77, 'Hovered marker mesh must highlight');
+assert(markersWithTex.markers[0].markerGroup.scale.x > 1.0, 'Hovered marker group must scale up');
+markersWithTex.dispose();
+console.log('✔ Marker.svg textured markers verified.');
+
 console.log('Testing Resource Disposal...');
 dispose();
 console.log('✔ Disposed without errors.');

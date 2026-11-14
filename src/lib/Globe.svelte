@@ -7,6 +7,9 @@
 	import moonUrl from '../assets/moon.webp';
 	import moonDisplacementUrl from '../assets/moon_displacement.tif';
 	import earthUrl from '../assets/earth.jpg';
+	import markerSvgUrl from '../assets/Marker.svg';
+	import placesData from './Places.json' with { type: 'json' };
+	import { createPlaceMarkers, checkPlaceHover, updatePlaceMarkersAnimation } from './places.js';
 
 	let {
 		lunarPositions = null,
@@ -27,6 +30,8 @@
 	let cursorCoords = $state(null);
 	let subSolarCoords = $state(null);
 	let subEarthCoords = $state(null);
+	let hoveredPlace = $state(null);
+	let hoverBoxPos = $state({ x: 0, y: 0, isNearTop: false });
 
 	let container;
 	let animId;
@@ -829,6 +834,17 @@
 			selectedCursor.visible = true;
 		}
 
+		// 10. Markers for Places.json using Marker.svg
+		const markerTexture = textureLoader.load(markerSvgUrl);
+		markerTexture.colorSpace = THREE.SRGBColorSpace;
+		const {
+			containerGroup: placesGroup,
+			markers: placeMarkers,
+			hitMeshes: placeHitMeshes,
+			dispose: disposePlaces
+		} = createPlaceMarkers(placesData.locations, 1.0, markerTexture);
+		scene.add(placesGroup);
+
 		const raycaster = new THREE.Raycaster();
 		const mouse = new THREE.Vector2(-1000, -1000);
 		const cursorNormal = new THREE.Vector3();
@@ -845,6 +861,32 @@
 			hasPointer = false;
 			cursor.visible = false;
 			cursorCoords = null;
+			hoveredPlace = null;
+			if (container) container.style.cursor = '';
+		}
+
+		let pointerDownPos = { x: 0, y: 0 };
+		function onPointerDown(e) {
+			pointerDownPos = { x: e.clientX, y: e.clientY };
+		}
+
+		function onClick(e) {
+			if (isCalculating || !container) return;
+			// Only select if not dragging camera
+			const dist = Math.hypot(e.clientX - pointerDownPos.x, e.clientY - pointerDownPos.y);
+			if (dist > 5) return;
+
+			const rect = container.getBoundingClientRect();
+			mouse.x = ((e.clientX - rect.left) / rect.width) * 2 - 1;
+			mouse.y = -((e.clientY - rect.top) / rect.height) * 2 + 1;
+			raycaster.setFromCamera(mouse, camera);
+
+			const placeHit = checkPlaceHover(raycaster, placeHitMeshes, camera);
+			if (placeHit) {
+				e.preventDefault();
+				e.stopPropagation();
+				onCoordinateSelect?.({ lat: placeHit.latitude, lon: placeHit.longitude });
+			}
 		}
 
 		function onDoubleClick(e) {
@@ -853,6 +895,16 @@
 			mouse.x = ((e.clientX - rect.left) / rect.width) * 2 - 1;
 			mouse.y = -((e.clientY - rect.top) / rect.height) * 2 + 1;
 			raycaster.setFromCamera(mouse, camera);
+
+			// Check if a place marker was clicked
+			const placeHit = checkPlaceHover(raycaster, placeHitMeshes, camera);
+			if (placeHit) {
+				e.preventDefault();
+				e.stopPropagation();
+				onCoordinateSelect?.({ lat: placeHit.latitude, lon: placeHit.longitude });
+				return;
+			}
+
 			const intersects = raycaster.intersectObject(moon);
 			if (intersects.length > 0) {
 				e.preventDefault();
@@ -866,6 +918,8 @@
 
 		container.addEventListener('pointermove', onPointerMove);
 		container.addEventListener('pointerleave', onPointerLeave);
+		container.addEventListener('pointerdown', onPointerDown);
+		container.addEventListener('click', onClick);
 		container.addEventListener('dblclick', onDoubleClick);
 
 		// Window resize
@@ -899,8 +953,29 @@
 				raySprites[i].scale.set(baseRayScale * currentFlareScale, baseRayScale * currentFlareScale, 1);
 			}
 
+			let currentHovered = null;
 			if (hasPointer) {
 				raycaster.setFromCamera(mouse, camera);
+				currentHovered = checkPlaceHover(raycaster, placeHitMeshes, camera);
+
+				if (currentHovered) {
+					hoveredPlace = currentHovered;
+					const proj = currentHovered.surfacePos.clone().project(camera);
+					const screenX = (proj.x * 0.5 + 0.5) * container.clientWidth;
+					const screenY = (-proj.y * 0.5 + 0.5) * container.clientHeight;
+
+					const marginX = 140;
+					const clampedX = Math.max(marginX, Math.min(container.clientWidth - marginX, screenX));
+					const isNearTop = screenY < 90;
+					const clampedY = isNearTop ? screenY + 28 : screenY - 24;
+
+					hoverBoxPos = { x: clampedX, y: clampedY, isNearTop };
+					container.style.cursor = 'pointer';
+				} else {
+					hoveredPlace = null;
+					container.style.cursor = '';
+				}
+
 				const intersects = raycaster.intersectObject(moon);
 				if (intersects.length > 0) {
 					const hitPoint = intersects[0].point;
@@ -914,12 +989,17 @@
 					lineMat.color.set(cursorLineColor);
 					shadowMat.opacity = cursorShadowOpacity;
 					shadowMesh.scale.set(cursorShadowSize, cursorShadowSize, 1);
-					cursor.visible = true;
+					cursor.visible = !currentHovered;
 				} else {
 					cursorCoords = null;
 					cursor.visible = false;
 				}
+			} else {
+				hoveredPlace = null;
 			}
+
+			const time = (timestamp || performance.now()) * 0.001;
+			updatePlaceMarkersAnimation(placeMarkers, time, currentHovered);
 
 			renderer.render(scene, camera);
 		}
@@ -931,7 +1011,14 @@
 			window.removeEventListener('resize', onResize);
 			container.removeEventListener('pointermove', onPointerMove);
 			container.removeEventListener('pointerleave', onPointerLeave);
+			container.removeEventListener('pointerdown', onPointerDown);
+			container.removeEventListener('click', onClick);
 			container.removeEventListener('dblclick', onDoubleClick);
+			controls.dispose();
+			renderer.dispose();
+			scene.remove(placesGroup);
+			disposePlaces();
+			markerTexture.dispose();
 			controls.dispose();
 			renderer.dispose();
 			cursorGeo.dispose();
@@ -989,6 +1076,16 @@
 			</div>
 		{/if}
 	</div>
+
+	{#if hoveredPlace}
+		<div
+			class="place-hover-box {hoverBoxPos.isNearTop ? 'is-below' : 'is-above'}"
+			style="left: {hoverBoxPos.x}px; top: {hoverBoxPos.y}px;"
+		>
+			<div class="place-name">{hoveredPlace.name}</div>
+			<div class="place-type">{hoveredPlace.type}</div>
+		</div>
+	{/if}
 </div>
 
 <style>
@@ -1034,5 +1131,65 @@
 		color: #ffaa44;
 		font-family: monospace;
 		font-size: 14px;
+	}
+	.place-hover-box {
+		position: absolute;
+		padding: 10px 24px;
+		background: rgba(255, 255, 255, 0.08);
+		color: #ffffff;
+		border: 1px solid rgba(255, 255, 255, 0.45);
+		border-radius: 4px;
+		font-family: "Jersey 25", sans-serif;
+		letter-spacing: 1px;
+		backdrop-filter: blur(8px);
+		-webkit-backdrop-filter: blur(8px);
+		box-shadow: 0 0 16px rgba(255, 255, 255, 0.15);
+		pointer-events: none;
+		z-index: 20;
+		text-align: center;
+		display: flex;
+		flex-direction: column;
+		align-items: center;
+		gap: 3px;
+		user-select: none;
+		white-space: nowrap;
+		animation: placeBoxFade 0.15s ease-out;
+	}
+	.place-hover-box.is-above {
+		transform: translate(-50%, -100%);
+	}
+	.place-hover-box.is-below {
+		transform: translate(-50%, 0);
+	}
+	.place-name {
+		font-size: 22px;
+		color: #ffffff;
+		line-height: 1.1;
+		letter-spacing: 1px;
+	}
+	.place-type {
+		font-size: 15px;
+		color: rgba(255, 255, 255, 0.7);
+		letter-spacing: 0.6px;
+	}
+	@keyframes placeBoxFade {
+		from {
+			opacity: 0;
+			transform: translate(-50%, -85%);
+		}
+		to {
+			opacity: 1;
+			transform: translate(-50%, -100%);
+		}
+	}
+	@keyframes placeBoxFadeBelow {
+		from {
+			opacity: 0;
+			transform: translate(-50%, -15%);
+		}
+		to {
+			opacity: 1;
+			transform: translate(-50%, 0);
+		}
 	}
 </style>
