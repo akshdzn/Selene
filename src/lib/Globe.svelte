@@ -3,9 +3,12 @@
 	import * as THREE from 'three';
 	import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
 	import UTIF from 'three/examples/jsm/libs/utif.module.js';
+	import { fetchCurrentLunarPositions, vector3ToLatLon, formatLatLon } from './ephemeris.js';
 	import moonUrl from '../assets/moon.webp';
 	import moonDisplacementUrl from '../assets/moon_displacement.tif';
 	import earthUrl from '../assets/earth.jpg';
+
+	let { lunarPositions = null } = $props();
 
 	let cursorRadius = $state(0.026);
 	let cursorThickness = $state(0.006);
@@ -16,9 +19,47 @@
 	let cursorShadowOpacity = $state(0.6);
 	let flareLength = $state(1.0); // Flare Length multiplier (1.0 = base max size; renders at 0.75x at default zoom)
 
+	let cursorCoords = $state(null);
+	let subSolarCoords = $state(null);
+	let subEarthCoords = $state(null);
 
 	let container;
 	let animId;
+
+	let sunMeshRef;
+	let innerCoronaRef;
+	let outerCoronaRef;
+	let horizontalStreakRef;
+	let raySpritesRef = [];
+	let sunLightRef;
+	let earthMeshRef;
+
+	function updateCelestialPositions(positions) {
+		if (!positions) return;
+		if (positions.sunPos) {
+			sunMeshRef?.position.copy(positions.sunPos);
+			innerCoronaRef?.position.copy(positions.sunPos);
+			outerCoronaRef?.position.copy(positions.sunPos);
+			horizontalStreakRef?.position.copy(positions.sunPos);
+			for (const ray of raySpritesRef) {
+				ray.position.copy(positions.sunPos);
+			}
+			sunLightRef?.position.copy(positions.sunPos);
+			const { lat, lon } = vector3ToLatLon(positions.sunPos);
+			subSolarCoords = formatLatLon(lat, lon);
+		}
+		if (positions.earthPos) {
+			earthMeshRef?.position.copy(positions.earthPos);
+			const { lat, lon } = vector3ToLatLon(positions.earthPos);
+			subEarthCoords = formatLatLon(lat, lon);
+		}
+	}
+
+	$effect(() => {
+		if (lunarPositions) {
+			updateCelestialPositions(lunarPositions);
+		}
+	});
 
 	// High-resolution procedural textures for realistic solar appearance & halo rings
 	function createInnerCoronaTexture() {
@@ -427,7 +468,10 @@
 		scene.add(starSystem.group);
 
 		// 5. Visual Sun in the background and directional lighting
-		const sunPos = new THREE.Vector3(28, 12, -45);
+		const defaultSunPos = new THREE.Vector3(28, 12, -45);
+		const defaultEarthPos = new THREE.Vector3(-14, 6, -24);
+		const sunPos = new THREE.Vector3().copy(lunarPositions?.sunPos || defaultSunPos);
+		const earthPos = new THREE.Vector3().copy(lunarPositions?.earthPos || defaultEarthPos);
 
 		// 5a. Solar Photosphere core with limb darkening
 		const sunMesh = new THREE.Mesh(
@@ -454,6 +498,7 @@
 		);
 		sunMesh.position.copy(sunPos);
 		scene.add(sunMesh);
+		sunMeshRef = sunMesh;
 
 		// 5b. Inner high-intensity corona bloom
 		const innerCoronaTex = createInnerCoronaTexture();
@@ -470,6 +515,7 @@
 		innerCorona.position.copy(sunPos);
 		innerCorona.scale.set(7.5, 7.5, 1);
 		scene.add(innerCorona);
+		innerCoronaRef = innerCorona;
 
 		// 5c. Outer extended corona fading smoothly into deep space
 		const outerCoronaTex = createOuterCoronaTexture();
@@ -486,6 +532,7 @@
 		outerCorona.position.copy(sunPos);
 		outerCorona.scale.set(16, 16, 1);
 		scene.add(outerCorona);
+		outerCoronaRef = outerCorona;
 
 		// 5d. Horizontal anamorphic light scattering flare streak (recreating ISS photo)
 		const BASE_STREAK_LENGTH = 46;
@@ -508,6 +555,7 @@
 		horizontalStreak.position.copy(sunPos);
 		horizontalStreak.scale.set(BASE_STREAK_LENGTH * initialFlareScale, BASE_STREAK_THICKNESS * initialFlareScale, 1);
 		scene.add(horizontalStreak);
+		horizontalStreakRef = horizontalStreak;
 
 		// 5e. Symmetrically rotated starburst diffraction light beams (16 rays = 8 crossing axes)
 		const beamTex = createSolarBeamTexture();
@@ -536,18 +584,19 @@
 			scene.add(raySprite);
 			raySprites.push(raySprite);
 		}
+		raySpritesRef = raySprites;
 
 		// Directional sunlight from the Sun's position to illuminate the Moon & reveal surface displacement
 		const sunLight = new THREE.DirectionalLight(0xfffaed, 2.8);
 		sunLight.position.copy(sunPos);
 		scene.add(sunLight);
+		sunLightRef = sunLight;
 
 		// Soft ambient light (earthshine & cosmic background) keeping unlit terrain navigably visible
 		const ambientLight = new THREE.AmbientLight(0xffffff, 0.18);
 		scene.add(ambientLight);
 
 		// 6. Background Earth (distant unlit textured sphere)
-		const earthPos = new THREE.Vector3(-14, 6, -24);
 		const earthTexture = textureLoader.load(earthUrl);
 		earthTexture.colorSpace = THREE.SRGBColorSpace;
 
@@ -560,12 +609,22 @@
 		earth.position.copy(earthPos);
 		earth.rotation.y = 1.2;
 		scene.add(earth);
+		earthMeshRef = earth;
+
+		if (!lunarPositions) {
+			fetchCurrentLunarPositions(0, 0).then((res) => {
+				updateCelestialPositions(res);
+			});
+		}
 
 		// 7. Hero Object: The Moon with displacement mapping and lighting
 		const moonTexture = textureLoader.load(moonUrl);
 		moonTexture.colorSpace = THREE.SRGBColorSpace;
 
 		const moonGeometry = new THREE.SphereGeometry(1.0, 256, 256);
+		// Bake Selenographic alignment into geometry: (0° lat, 0° lon) is along +Z, North is +Y, East is +X
+		moonGeometry.rotateY(-Math.PI / 2);
+
 		const moonMaterial = new THREE.MeshStandardMaterial({
 			map: moonTexture,
 			displacementScale: 0.001,
@@ -663,8 +722,7 @@
 		});
 
 		const moon = new THREE.Mesh(moonGeometry, moonMaterial);
-		// Align near-side (0° lon) to initially face the camera
-		moon.rotation.y = -Math.PI / 2;
+		// Selenographic orientation baked into moonGeometry: (0°N, 0°E) faces +Z directly
 		scene.add(moon);
 
 		// 8. 3D surface cursor (white circular outline hovering over moon surface)
@@ -731,6 +789,7 @@
 		function onPointerLeave() {
 			hasPointer = false;
 			cursor.visible = false;
+			cursorCoords = null;
 		}
 
 		container.addEventListener('pointermove', onPointerMove);
@@ -775,6 +834,8 @@
 					cursorNormal.copy(hitPoint).normalize();
 					cursor.position.copy(hitPoint).addScaledVector(cursorNormal, 0.003);
 					cursor.quaternion.setFromUnitVectors(UP_Z, cursorNormal);
+					const { lat, lon } = vector3ToLatLon(cursorNormal);
+					cursorCoords = formatLatLon(lat, lon);
 					const lineR = cursorLineThickness / 2;
 					line.scale.set(lineR, lineR, cursorLineLength);
 					lineMat.color.set(cursorLineColor);
@@ -782,6 +843,7 @@
 					shadowMesh.scale.set(cursorShadowSize, cursorShadowSize, 1);
 					cursor.visible = true;
 				} else {
+					cursorCoords = null;
 					cursor.visible = false;
 				}
 			}
@@ -832,6 +894,24 @@
 </script>
 
 <div class="space-viewport" bind:this={container}>
+	<div class="hud-panel">
+		<div class="hud-item">
+			<span class="hud-label">COORDINATES:</span>
+			<span class="hud-val">{cursorCoords ? cursorCoords.full : 'HOVER MOON'}</span>
+		</div>
+		{#if subSolarCoords}
+			<div class="hud-item">
+				<span class="hud-label">SUB-SOLAR:</span>
+				<span class="hud-val">{subSolarCoords.full}</span>
+			</div>
+		{/if}
+		{#if subEarthCoords}
+			<div class="hud-item">
+				<span class="hud-label">SUB-EARTH:</span>
+				<span class="hud-val">{subEarthCoords.full}</span>
+			</div>
+		{/if}
+	</div>
 	<div class="overlay-hint">Drag to rotate the Moon &bull; Scroll to zoom</div>
 </div>
 
@@ -847,6 +927,37 @@
 	}
 	.space-viewport:active {
 		cursor: grabbing;
+	}
+	.hud-panel {
+		position: absolute;
+		top: 24px;
+		left: 24px;
+		display: flex;
+		flex-direction: column;
+		gap: 6px;
+		padding: 12px 18px;
+		background: rgba(10, 10, 16, 0.7);
+		border: 1px solid rgba(255, 255, 255, 0.15);
+		border-radius: 6px;
+		backdrop-filter: blur(10px);
+		font-family: "Jersey 25", sans-serif;
+		letter-spacing: 0.8px;
+		pointer-events: none;
+		z-index: 10;
+	}
+	.hud-item {
+		display: flex;
+		align-items: center;
+		gap: 8px;
+		font-size: 16px;
+	}
+	.hud-label {
+		color: rgba(255, 255, 255, 0.5);
+	}
+	.hud-val {
+		color: #ffaa44;
+		font-family: monospace;
+		font-size: 14px;
 	}
 	.overlay-hint {
 		position: absolute;
