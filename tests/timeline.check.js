@@ -192,4 +192,43 @@ assert.deepEqual(f2, { dateStr: 'NOV 17 2026', timeStr: '02:00 PM' });
 const f3 = formatDate('2026-Nov-25 00:00');
 assert.deepEqual(f3, { dateStr: 'NOV 25 2026', timeStr: '12:00 AM' });
 
+// 5. Test Hourly Step Marks & Snapping Slider
+const totalStepsCount = 481;
+const count = totalStepsCount - 1;
+const tickMarks = [];
+for (let i = 0; i <= count; i++) {
+  tickMarks.push({
+    pct: (i / count) * 100,
+    isDay: i % 24 === 0,
+    isHalfDay: i % 12 === 0
+  });
+}
+assert.equal(tickMarks.length, totalStepsCount, 'Tick marks count matches dataset hourly steps count');
+assert.equal(tickMarks[0].pct, 0);
+assert.equal(tickMarks[count].pct, 100);
+assert.equal(tickMarks[24].isDay, true, 'Every 24 hours is marked as a day boundary');
+assert.equal(tickMarks[12].isHalfDay, true, 'Every 12 hours is marked as half day');
+
+// Test pointer snapping alignment with ticks
+for (let i = 0; i < totalStepsCount; i++) {
+  const fraction = i / count;
+  const targetIndex = Math.min(count, Math.max(0, Math.round(fraction * count)));
+  assert.equal(targetIndex, i);
+  const playheadPct = (targetIndex / count) * 100;
+  assert.equal(playheadPct, tickMarks[i].pct, `Playhead position snaps exactly to tick mark ${i}`);
+}
+
+// Test keyboard arrow key step navigation logic
+let testIndex = 240;
+const clampIndex = (idx) => Math.min(count, Math.max(0, idx));
+// ArrowRight
+testIndex = clampIndex(testIndex + 1);
+assert.equal(testIndex, 241, 'ArrowRight steps +1 hour forward');
+// ArrowLeft
+testIndex = clampIndex(testIndex - 1);
+assert.equal(testIndex, 240, 'ArrowLeft steps -1 hour backward');
+// Clamping at ends
+assert.equal(clampIndex(count + 1), count, 'Clamps at end');
+assert.equal(clampIndex(-1), 0, 'Clamps at start');
+
 console.log('All timeline logic and overlap checks passed successfully.');

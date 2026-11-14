@@ -238,16 +238,13 @@
     };
   });
 
-  function updatePlayheadFromPointer(clientX) {
-    if (!trackElement) return;
-    const rect = trackElement.getBoundingClientRect();
-    const clampedX = Math.max(0, Math.min(rect.width, clientX - rect.left));
-    const fraction = rect.width > 0 ? clampedX / rect.width : 0;
-    const targetIndex = Math.min(totalSteps - 1, Math.max(0, Math.round(fraction * (totalSteps - 1))));
+  function setPlayheadIndex(targetIndex) {
+    const idx = Math.min(totalSteps - 1, Math.max(0, targetIndex));
+    if (idx === currentPlayheadIndex && currentPlayheadTime) return;
 
-    currentPlayheadIndex = targetIndex;
-    const sunEntry = sunList[targetIndex];
-    const earthEntry = earthList[targetIndex];
+    currentPlayheadIndex = idx;
+    const sunEntry = sunList[idx];
+    const earthEntry = earthList[idx];
     currentPlayheadTime = sunEntry?.time || '';
 
     if (onTimeChange && sunEntry && earthEntry) {
@@ -255,12 +252,63 @@
       const siteLon = dataset?.coordinates?.longitude ?? 0;
       const celestialPositions = calculateCelestialPositions(sunEntry, earthEntry, siteLat, siteLon);
       onTimeChange({
-        index: targetIndex,
+        index: idx,
         time: currentPlayheadTime,
         sunEntry,
         earthEntry,
         celestialPositions
       });
+    }
+  }
+
+  function updatePlayheadFromPointer(clientX) {
+    if (!trackElement) return;
+    const rect = trackElement.getBoundingClientRect();
+    const clampedX = Math.max(0, Math.min(rect.width, clientX - rect.left));
+    const fraction = rect.width > 0 ? clampedX / rect.width : 0;
+    const targetIndex = Math.min(totalSteps - 1, Math.max(0, Math.round(fraction * (totalSteps - 1))));
+    setPlayheadIndex(targetIndex);
+  }
+
+  let isMovingKeys = $state(false);
+  let keyMoveTimeout = null;
+
+  function triggerKeyMovement() {
+    isMovingKeys = true;
+    if (keyMoveTimeout) clearTimeout(keyMoveTimeout);
+    keyMoveTimeout = setTimeout(() => {
+      isMovingKeys = false;
+    }, 400);
+  }
+
+  function handleKeyDown(e) {
+    const tag = e.target?.tagName?.toLowerCase();
+    if (tag === 'input' || tag === 'textarea' || e.target?.isContentEditable) return;
+
+    if (e.key === 'ArrowRight') {
+      e.preventDefault();
+      setPlayheadIndex(currentPlayheadIndex + 1);
+      triggerKeyMovement();
+    } else if (e.key === 'ArrowLeft') {
+      e.preventDefault();
+      setPlayheadIndex(currentPlayheadIndex - 1);
+      triggerKeyMovement();
+    } else if (e.key === 'PageUp') {
+      e.preventDefault();
+      setPlayheadIndex(currentPlayheadIndex + 24);
+      triggerKeyMovement();
+    } else if (e.key === 'PageDown') {
+      e.preventDefault();
+      setPlayheadIndex(currentPlayheadIndex - 24);
+      triggerKeyMovement();
+    } else if (e.key === 'Home') {
+      e.preventDefault();
+      setPlayheadIndex(0);
+      triggerKeyMovement();
+    } else if (e.key === 'End') {
+      e.preventDefault();
+      setPlayheadIndex(totalSteps - 1);
+      triggerKeyMovement();
     }
   }
 
@@ -309,22 +357,26 @@
     };
     window.addEventListener('pointermove', onWinMove, { passive: false });
     window.addEventListener('pointerup', onWinUp);
+    window.addEventListener('keydown', handleKeyDown);
+
     return () => {
       window.removeEventListener('pointermove', onWinMove);
       window.removeEventListener('pointerup', onWinUp);
+      window.removeEventListener('keydown', handleKeyDown);
+      if (keyMoveTimeout) clearTimeout(keyMoveTimeout);
     };
   });
 
-  // Calculate step tick marks (one every 12 hours)
+  // Calculate step tick marks: one step mark for every hour in the dataset (matching hour count)
   let tickMarks = $derived.by(() => {
     const marks = [];
-    const stepInterval = 12;
-    const count = Math.floor(totalSteps / stepInterval);
+    const count = Math.max(1, totalSteps - 1);
     for (let i = 0; i <= count; i++) {
-      const idx = i * stepInterval;
-      if (idx < totalSteps) {
-        marks.push((idx / (totalSteps - 1)) * 100);
-      }
+      marks.push({
+        pct: (i / count) * 100,
+        isDay: i % 24 === 0,
+        isHalfDay: i % 12 === 0
+      });
     }
     return marks;
   });
@@ -350,20 +402,30 @@
     {/each}
   </div>
 
-  <!-- Main Timeline Track Bar (height: 40px) -->
-  <!-- svelte-ignore a11y_no_static_element_interactions -->
+  <!-- Main Timeline Track Bar (height: 40px, snaps to hourly steps like a range slider) -->
   <div
     class="timeline-track"
     bind:this={trackElement}
+    tabindex="0"
+    role="slider"
+    aria-label="Mission Timeline (Hourly Ephemeris)"
+    aria-valuemin="0"
+    aria-valuemax={totalSteps - 1}
+    aria-valuenow={currentPlayheadIndex}
+    aria-valuetext={currentPlayheadTime}
+    onkeydown={handleKeyDown}
     onpointerdown={handlePointerDown}
     onpointermove={handlePointerMove}
     onpointerup={handlePointerUp}
     onpointercancel={handlePointerCancel}
   >
-    <!-- Background Step Tick Lines -->
+    <!-- Background Step Tick Lines (Matches hour count) -->
     <div class="steps-grid">
       {#each tickMarks as mark}
-        <div class="step-line" style="left: {mark}%;"></div>
+        <div
+          class="step-line {mark.isDay ? 'is-day' : mark.isHalfDay ? 'is-half-day' : ''}"
+          style="left: {mark.pct}%;"
+        ></div>
       {/each}
     </div>
 
@@ -412,9 +474,11 @@
     {/each}
 
     <!-- Draggable Snapping Playhead (Group 4 from Figma #26:46) -->
+    <!-- svelte-ignore a11y_no_static_element_interactions -->
     <div
-      class="playhead"
+      class="playhead {isDragging || isMovingKeys ? 'is-dragging' : ''}"
       style="left: {(currentPlayheadIndex / (totalSteps - 1)) * 100}%;"
+      onpointerdown={handlePointerDown}
     >
       <svg
         class="playhead-svg"
@@ -424,12 +488,13 @@
         fill="none"
         xmlns="http://www.w3.org/2000/svg"
       >
-        <!-- Top Pin Marker Head (21x28) -->
-        <rect width="21" height="28" fill="#FF2600" />
-        <!-- Downward triangle arrow point (y: 28 to 38.5) -->
-        <path d="M0 28H21L10.5 38.5L0 28Z" fill="#FF2600" />
+        <!-- Top Pin Marker Head & Downward triangle arrow (decorative part, transparent when idle) -->
+        <g class="playhead-decorative">
+          <rect width="21" height="28" fill="#FF2600" />
+          <path d="M0 28H21L10.5 38.5L0 28Z" fill="#FF2600" />
+        </g>
         <!-- Vertical needle line through the 40px track (y: 28 to 68) -->
-        <rect x="8" y="28" width="5" height="40" fill="#FF2600" />
+        <rect class="playhead-needle" x="8" y="28" width="5" height="40" fill="#FF2600" />
       </svg>
     </div>
   </div>
@@ -548,6 +613,11 @@
     z-index: 20;
   }
 
+  .timeline-track:focus-visible {
+    outline: 2px solid rgba(255, 255, 255, 0.4);
+    outline-offset: 2px;
+  }
+
   /* Step Lines */
   .steps-grid {
     position: absolute;
@@ -563,7 +633,15 @@
     top: 0;
     bottom: 0;
     width: 1px;
-    background-color: rgba(255, 255, 255, 0.2);
+    background-color: rgba(255, 255, 255, 0.12);
+  }
+
+  .step-line.is-half-day {
+    background-color: rgba(255, 255, 255, 0.25);
+  }
+
+  .step-line.is-day {
+    background-color: rgba(255, 255, 255, 0.45);
   }
 
   /* Range Rectangles */
@@ -622,11 +700,25 @@
     cursor: grab;
     z-index: 100; /* Highest priority on top of everything */
     touch-action: none;
-    pointer-events: none; /* Let parent track handle pointer events seamlessly */
+    pointer-events: auto; /* Make playhead directly draggable */
   }
 
+  .playhead:active,
+  .playhead.is-dragging,
   .timeline-track:active .playhead {
     cursor: grabbing;
+  }
+
+  /* Decorative marker head & arrow are transparent when playhead is not moving/idle */
+  .playhead-decorative {
+    opacity: 0;
+    transition: opacity 0.15s ease;
+  }
+
+  /* Reveal decorative handle on hover or while dragging */
+  .playhead:hover .playhead-decorative,
+  .playhead.is-dragging .playhead-decorative {
+    opacity: 1;
   }
 
   .playhead-svg {
