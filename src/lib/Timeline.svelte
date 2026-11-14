@@ -806,18 +806,23 @@
   }
 
   .bottom-left-time {
-    display: flex;
+    display: inline-flex;
     align-items: center;
-    gap: 16px;
+    gap: 8px;
+    background-color: #ff2600;
     color: #ffffff;
-    font-size: 15px;
+    padding: 3px 8px;
+    border-radius: 1px;
+    font-size: 13px;
     font-weight: 700;
+    line-height: 1;
     letter-spacing: 0.5px;
+    white-space: nowrap;
   }
 
   .info-date,
   .info-time {
-    padding: 3px 0;
+    line-height: 1;
   }
 
   .bottom-right-hint {

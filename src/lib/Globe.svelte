@@ -1138,7 +1138,6 @@
 		background: rgba(255, 255, 255, 0.08);
 		color: #ffffff;
 		border: 1px solid rgba(255, 255, 255, 0.45);
-		border-radius: 4px;
 		font-family: "Jersey 25", sans-serif;
 		letter-spacing: 1px;
 		backdrop-filter: blur(8px);
@@ -1169,6 +1168,7 @@
 	}
 	.place-type {
 		font-size: 15px;
+		font-family: 'Space Grotesk', -apple-system, BlinkMacSystemFont, sans-serif;
 		color: rgba(255, 255, 255, 0.7);
 		letter-spacing: 0.6px;
 	}

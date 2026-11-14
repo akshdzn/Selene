@@ -141,7 +141,6 @@
     padding: 14px 28px;
     background: rgba(0, 0, 0, 0.7);
     border: 1px solid rgba(255, 255, 255, 0.25);
-    border-radius: 4px;
     color: rgba(255, 255, 255, 0.85);
     font-family: 'Space Grotesk', sans-serif;
     font-size: 15px;
