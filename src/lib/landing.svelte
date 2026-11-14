@@ -5,12 +5,39 @@
 	import earthUrl from '../assets/earth.jpg';
 	import moonUrl from '../assets/moon.webp';
 
-	let { onComplete } = $props();
+	let { onComplete, lunarPositions = null, isLoaded = false } = $props();
 
 	let container;
 	let animId;
 	let isWarping = $state(false);
 	let triggerFlight;
+
+	let distantMoonMesh;
+	let earthMesh;
+	const moonPos = new THREE.Vector3(-14, 6, -24);
+	const startCamPos = new THREE.Vector3();
+	const startTarget = new THREE.Vector3();
+	const endCamPos = new THREE.Vector3(moonPos.x, moonPos.y, moonPos.z + 2.9);
+	const endTarget = moonPos.clone();
+	const flightDir = new THREE.Vector3();
+
+	function applyPositions(positions) {
+		if (!positions?.earthPos || !distantMoonMesh || !earthMesh) return;
+		// The Moon from Earth is in the exact opposite direction of Earth from the Moon
+		const moonDir = positions.earthPos.clone().negate().normalize();
+		moonPos.copy(moonDir.multiplyScalar(28.0));
+		distantMoonMesh.position.copy(moonPos);
+		endCamPos.set(moonPos.x, moonPos.y, moonPos.z + 2.9);
+		endTarget.copy(moonPos);
+		earthMesh.visible = true;
+		distantMoonMesh.visible = true;
+	}
+
+	$effect(() => {
+		if (isLoaded && lunarPositions) {
+			applyPositions(lunarPositions);
+		}
+	});
 
 	// Soft circular star sprite for natural rendering without square particle artifacts
 	function createStarTexture() {
@@ -274,7 +301,6 @@
 		scene.add(starSystem.group);
 
 		// 5. Distant Moon in the horizon (visible for future transitions)
-		const moonPos = new THREE.Vector3(-14, 6, -24);
 		const moonTexture = textureLoader.load(moonUrl);
 		moonTexture.colorSpace = THREE.SRGBColorSpace;
 
@@ -302,15 +328,18 @@
 		earth.rotation.z = 23.44 * (Math.PI / 180);
 		scene.add(earth);
 
+		distantMoonMesh = distantMoon;
+		earthMesh = earth;
+		earth.visible = Boolean(isLoaded);
+		distantMoon.visible = Boolean(isLoaded);
+		if (isLoaded && lunarPositions) {
+			applyPositions(lunarPositions);
+		}
+
 		// Hyperdrive flight state
 		const FLIGHT_DURATION = 2000; // ms (exact 2000ms duration)
 		let flightStartTime = null;
 		let flightCompleted = false;
-		const startCamPos = new THREE.Vector3();
-		const startTarget = new THREE.Vector3();
-		const endCamPos = new THREE.Vector3(moonPos.x, moonPos.y, moonPos.z + 2.9);
-		const endTarget = moonPos.clone();
-		const flightDir = new THREE.Vector3();
 
 		// inOutCirc circular easing curve
 		function inOutCirc(t) {
@@ -396,7 +425,12 @@
 </script>
 
 <div class="space-viewport" bind:this={container}>
-	{#if !isWarping}
+	{#if !isLoaded}
+		<div class="loading-hud">
+			<div class="pulse-dot"></div>
+			<span>ACQUIRING LUNAR EPHEMERIS FROM HORIZONS...</span>
+		</div>
+	{:else if !isWarping}
 		<button class="travel-btn" onclick={() => triggerFlight?.()}>
 			[ TRAVEL TO MOON ]
 		</button>
@@ -416,6 +450,32 @@
 	}
 	.space-viewport:active {
 		cursor: grabbing;
+	}
+	.loading-hud {
+		position: absolute;
+		bottom: 48px;
+		left: 50%;
+		transform: translateX(-50%);
+		display: flex;
+		align-items: center;
+		gap: 12px;
+		color: rgba(255, 255, 255, 0.7);
+		font-family: "Jersey 25", sans-serif;
+		font-size: 20px;
+		letter-spacing: 1px;
+		pointer-events: none;
+	}
+	.pulse-dot {
+		width: 10px;
+		height: 10px;
+		border-radius: 50%;
+		background: #ff5500;
+		box-shadow: 0 0 10px #ff5500;
+		animation: pulse 1.2s infinite ease-in-out;
+	}
+	@keyframes pulse {
+		0%, 100% { opacity: 0.3; transform: scale(0.8); }
+		50% { opacity: 1; transform: scale(1.2); }
 	}
 	.travel-btn {
 		position: absolute;

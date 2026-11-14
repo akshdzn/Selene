@@ -3,9 +3,12 @@
 	import * as THREE from 'three';
 	import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
 	import UTIF from 'three/examples/jsm/libs/utif.module.js';
+	import { fetchCurrentLunarPositions } from './ephemeris.js';
 	import moonUrl from '../assets/moon.webp';
 	import moonDisplacementUrl from '../assets/moon_displacement.tif';
 	import earthUrl from '../assets/earth.jpg';
+
+	let { lunarPositions = null } = $props();
 
 	let cursorRadius = $state(0.026);
 	let cursorThickness = $state(0.006);
@@ -15,9 +18,31 @@
 	let cursorShadowSize = $state(0.15);
 	let cursorShadowOpacity = $state(0.6);
 
-
 	let container;
 	let animId;
+
+	let sunMeshRef;
+	let sunGlowRef;
+	let sunLightRef;
+	let earthMeshRef;
+
+	function updateCelestialPositions(positions) {
+		if (!positions) return;
+		if (positions.sunPos) {
+			sunMeshRef?.position.copy(positions.sunPos);
+			sunGlowRef?.position.copy(positions.sunPos);
+			sunLightRef?.position.copy(positions.sunPos);
+		}
+		if (positions.earthPos) {
+			earthMeshRef?.position.copy(positions.earthPos);
+		}
+	}
+
+	$effect(() => {
+		if (lunarPositions) {
+			updateCelestialPositions(lunarPositions);
+		}
+	});
 
 	// Gentle radial glow for the visual Sun disk
 	function createSunGlowTexture() {
@@ -294,7 +319,10 @@
 		scene.add(starSystem.group);
 
 		// 5. Visual Sun in the background and directional lighting
-		const sunPos = new THREE.Vector3(28, 12, -45);
+		const defaultSunPos = new THREE.Vector3(28, 12, -45);
+		const defaultEarthPos = new THREE.Vector3(-14, 6, -24);
+		const sunPos = new THREE.Vector3().copy(lunarPositions?.sunPos || defaultSunPos);
+		const earthPos = new THREE.Vector3().copy(lunarPositions?.earthPos || defaultEarthPos);
 
 		const sunMesh = new THREE.Mesh(
 			new THREE.SphereGeometry(1.8, 32, 32),
@@ -302,6 +330,7 @@
 		);
 		sunMesh.position.copy(sunPos);
 		scene.add(sunMesh);
+		sunMeshRef = sunMesh;
 
 		const sunGlowTex = createSunGlowTexture();
 		const sunGlow = new THREE.Sprite(
@@ -316,18 +345,19 @@
 		sunGlow.position.copy(sunPos);
 		sunGlow.scale.set(10, 10, 1);
 		scene.add(sunGlow);
+		sunGlowRef = sunGlow;
 
 		// Directional sunlight from the Sun's position to illuminate the Moon & reveal surface displacement
 		const sunLight = new THREE.DirectionalLight(0xfffaed, 2.8);
 		sunLight.position.copy(sunPos);
 		scene.add(sunLight);
+		sunLightRef = sunLight;
 
 		// Soft ambient light (earthshine & cosmic background) keeping unlit terrain navigably visible
 		const ambientLight = new THREE.AmbientLight(0xffffff, 0.18);
 		scene.add(ambientLight);
 
 		// 6. Background Earth (distant unlit textured sphere)
-		const earthPos = new THREE.Vector3(-14, 6, -24);
 		const earthTexture = textureLoader.load(earthUrl);
 		earthTexture.colorSpace = THREE.SRGBColorSpace;
 
@@ -340,6 +370,13 @@
 		earth.position.copy(earthPos);
 		earth.rotation.y = 1.2;
 		scene.add(earth);
+		earthMeshRef = earth;
+
+		if (!lunarPositions) {
+			fetchCurrentLunarPositions(0, 0).then((res) => {
+				updateCelestialPositions(res);
+			});
+		}
 
 		// 7. Hero Object: The Moon with displacement mapping and lighting
 		const moonTexture = textureLoader.load(moonUrl);

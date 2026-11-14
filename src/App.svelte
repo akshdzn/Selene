@@ -1,11 +1,22 @@
 <script>
+  import { onMount } from 'svelte';
   import Globe from './lib/Globe.svelte';
-  import getLunarData from '../backend/Lunarfunction';
   import LandingPage from './lib/landing.svelte';
+  import { fetchCurrentLunarPositions } from './lib/ephemeris.js';
 
   let showLanding = $state(true);
   let showGlobe = $state(false);
   let landingOpacity = $state(1);
+
+  let lat = $state(0);
+  let lon = $state(0);
+  let lunarPositions = $state(null);
+  let ephemerisLoaded = $state(false);
+
+  onMount(async () => {
+    lunarPositions = await fetchCurrentLunarPositions(lat, lon);
+    ephemerisLoaded = true;
+  });
 
   function handleTransitionToMoon() {
     // 1. Mount Globe underneath LandingPage (LandingPage is still opacity: 1)
@@ -22,31 +33,12 @@
       });
     });
   }
-
-  let lat = $state(-89.9);
-  let lon = $state(0);
-  let result = $state(null);
-  let loading = $state(false);
-
-  async function checkSite(targetLat, targetLon) {
-    loading = true;
-    try {
-      result = await getLunarData(targetLat, targetLon);
-      console.log('Site Analysis:', result);
-    } catch (err) {
-      console.error(err);
-    } finally {
-      loading = false;
-    }
-  }
-
-  checkSite(23, 23);
 </script>
 
 <main class="app-viewport">
   {#if showGlobe}
     <div class="view-layer globe-layer">
-      <Globe />
+      <Globe {lunarPositions} />
     </div>
   {/if}
 
@@ -55,7 +47,11 @@
       class="view-layer landing-layer"
       style="opacity: {landingOpacity};"
     >
-      <LandingPage onComplete={handleTransitionToMoon} />
+      <LandingPage
+        {lunarPositions}
+        isLoaded={ephemerisLoaded}
+        onComplete={handleTransitionToMoon}
+      />
     </div>
   {/if}
 </main>
