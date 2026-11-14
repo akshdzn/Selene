@@ -3,9 +3,14 @@
 	import * as THREE from 'three';
 	import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
 	import earthUrl from '../assets/earth.jpg';
+	import moonUrl from '../assets/moon.webp';
+
+	let { onComplete } = $props();
 
 	let container;
 	let animId;
+	let isWarping = $state(false);
+	let triggerFlight;
 
 	// Soft circular star sprite for natural rendering without square particle artifacts
 	function createStarTexture() {
@@ -102,7 +107,7 @@
 			}
 		}
 
-		// 1. Star heads (soft glowing points at current camera pose)
+		// 1. Star heads (soft circular points at current camera pose)
 		const headGeometry = new THREE.BufferGeometry();
 		headGeometry.setAttribute('position', new THREE.BufferAttribute(headPositions, 3));
 		headGeometry.setAttribute('color', new THREE.BufferAttribute(headColors, 3));
@@ -176,7 +181,7 @@
 		const scaleOne = new THREE.Vector3(1, 1, 1);
 		const MAX_TRAIL_ANGLE = 0.18;
 
-		function update(camera) {
+		function update(camera, warpIntensity = 0, flightDir = null) {
 			if (!initialized) {
 				for (let k = 0; k < STEPS; k++) {
 					historyQuats[k].copy(camera.quaternion);
@@ -190,25 +195,36 @@
 			historyQuats[0].copy(camera.quaternion);
 			historyPositions[0].copy(camera.position);
 
-			for (let k = 1; k < STEPS; k++) {
-				historyQuats[k].slerp(historyQuats[k - 1], 0.50);
-				historyPositions[k].lerp(historyPositions[k - 1], 0.50);
-			}
-
-			const currentTrailAngle = historyQuats[0].angleTo(historyQuats[STEPS - 1]);
-			let effectiveAngle = currentTrailAngle;
-
-			if (currentTrailAngle > MAX_TRAIL_ANGLE) {
-				const clampRatio = MAX_TRAIL_ANGLE / currentTrailAngle;
+			if (warpIntensity > 0 && flightDir) {
+				// Hyperdrive mode during Earth -> Moon movement:
+				// 5x original star trail length and 4x original intensity
+				const trailStepLength = 17.5; // 5x original (3.5 * 5)
 				for (let k = 1; k < STEPS; k++) {
-					historyQuats[k].slerpQuaternions(historyQuats[0], historyQuats[k], clampRatio);
-					historyPositions[k].lerpVectors(historyPositions[0], historyPositions[k], clampRatio);
+					historyQuats[k].copy(camera.quaternion);
+					historyPositions[k].copy(camera.position).addScaledVector(flightDir, -warpIntensity * k * trailStepLength);
 				}
-				effectiveAngle = MAX_TRAIL_ANGLE;
-			}
+				trailMaterial.uniforms.uTrailOpacity.value = (0.6 + warpIntensity * 0.4) * 4.0; // 4x original intensity (additive glow)
+			} else {
+				for (let k = 1; k < STEPS; k++) {
+					historyQuats[k].slerp(historyQuats[k - 1], 0.50);
+					historyPositions[k].lerp(historyPositions[k - 1], 0.50);
+				}
 
-			const lengthRatio = effectiveAngle / MAX_TRAIL_ANGLE;
-			trailMaterial.uniforms.uTrailOpacity.value = 1.0 / (1.0 + 2.2 * lengthRatio);
+				const currentTrailAngle = historyQuats[0].angleTo(historyQuats[STEPS - 1]);
+				let effectiveAngle = currentTrailAngle;
+
+				if (currentTrailAngle > MAX_TRAIL_ANGLE) {
+					const clampRatio = MAX_TRAIL_ANGLE / currentTrailAngle;
+					for (let k = 1; k < STEPS; k++) {
+						historyQuats[k].slerpQuaternions(historyQuats[0], historyQuats[k], clampRatio);
+						historyPositions[k].lerpVectors(historyPositions[0], historyPositions[k], clampRatio);
+					}
+					effectiveAngle = MAX_TRAIL_ANGLE;
+				}
+
+				const lengthRatio = effectiveAngle / MAX_TRAIL_ANGLE;
+				trailMaterial.uniforms.uTrailOpacity.value = 1.0 / (1.0 + 2.2 * lengthRatio);
+			}
 
 			for (let k = 0; k < STEPS; k++) {
 				trailMatrices[k].compose(historyPositions[k], historyQuats[k], scaleOne).invert();
@@ -230,7 +246,7 @@
 		const width = container.clientWidth;
 		const height = container.clientHeight;
 
-		// 1. Scene & Camera (focused on the Moon at origin)
+		// 1. Scene & Camera (focused on Earth at origin)
 		const scene = new THREE.Scene();
 		const camera = new THREE.PerspectiveCamera(45, width / height, 0.1, 1000);
 		camera.position.set(0, 0, 2.9);
@@ -242,7 +258,7 @@
 		renderer.toneMapping = THREE.NoToneMapping;
 		container.appendChild(renderer.domElement);
 
-		// 3. Orbit Controls: Moon stays perfectly centered
+		// 3. Orbit Controls: Earth stays centered
 		const controls = new OrbitControls(camera, renderer.domElement);
 		controls.enableDamping = true;
 		controls.dampingFactor = 0.05;
@@ -257,7 +273,22 @@
 		const starSystem = createStarfield(2500);
 		scene.add(starSystem.group);
 
-		// 5. Hero Object: Earth (100% visible, unlit flat texture, 23.44° axial tilt)
+		// 5. Distant Moon in the horizon (visible for future transitions)
+		const moonPos = new THREE.Vector3(-14, 6, -24);
+		const moonTexture = textureLoader.load(moonUrl);
+		moonTexture.colorSpace = THREE.SRGBColorSpace;
+
+		const moonGeometry = new THREE.SphereGeometry(0.85, 48, 48);
+		const moonMaterial = new THREE.MeshBasicMaterial({
+			map: moonTexture
+		});
+		const distantMoon = new THREE.Mesh(moonGeometry, moonMaterial);
+		distantMoon.name = 'distantMoon';
+		distantMoon.position.copy(moonPos);
+		distantMoon.rotation.y = -Math.PI / 2; // Near-side facing toward camera
+		scene.add(distantMoon);
+
+		// 6. Hero Object: Earth (100% visible, unlit flat texture, 23.44° axial tilt)
 		const earthTexture = textureLoader.load(earthUrl);
 		earthTexture.colorSpace = THREE.SRGBColorSpace;
 
@@ -271,6 +302,33 @@
 		earth.rotation.z = 23.44 * (Math.PI / 180);
 		scene.add(earth);
 
+		// Hyperdrive flight state
+		const FLIGHT_DURATION = 2000; // ms (exact 2000ms duration)
+		let flightStartTime = null;
+		let flightCompleted = false;
+		const startCamPos = new THREE.Vector3();
+		const startTarget = new THREE.Vector3();
+		const endCamPos = new THREE.Vector3(moonPos.x, moonPos.y, moonPos.z + 2.9);
+		const endTarget = moonPos.clone();
+		const flightDir = new THREE.Vector3();
+
+		// inOutCirc circular easing curve
+		function inOutCirc(t) {
+			return t < 0.5
+				? (1 - Math.sqrt(1 - Math.pow(2 * t, 2))) / 2
+				: (Math.sqrt(1 - Math.pow(-2 * t + 2, 2)) + 1) / 2;
+		}
+
+		triggerFlight = function() {
+			if (isWarping) return;
+			isWarping = true;
+			controls.enabled = false;
+			startCamPos.copy(camera.position);
+			startTarget.copy(controls.target);
+			flightDir.subVectors(endCamPos, startCamPos).normalize();
+			flightStartTime = performance.now();
+		};
+
 		// Window resize
 		function onResize() {
 			if (!container) return;
@@ -283,10 +341,39 @@
 		window.addEventListener('resize', onResize);
 
 		// Render loop
-		function animate() {
+		function animate(timestamp) {
 			animId = requestAnimationFrame(animate);
-			controls.update();
-			starSystem.update(camera);
+
+			if (!isWarping) {
+				controls.update();
+				starSystem.update(camera, 0, null);
+			} else {
+				const now = timestamp || performance.now();
+				const elapsed = now - flightStartTime;
+				const t = Math.min(elapsed / FLIGHT_DURATION, 1.0);
+
+				// inOutCirc easing curve for camera translation
+				const posProgress = inOutCirc(t);
+
+				// Warp trail intensity peaks in mid-flight and smoothly drops to 0 at arrival
+				const warpIntensity = Math.pow(Math.sin(Math.PI * t), 1.2);
+
+				camera.position.lerpVectors(startCamPos, endCamPos, posProgress);
+				const currentTarget = new THREE.Vector3().lerpVectors(startTarget, endTarget, posProgress);
+				camera.lookAt(currentTarget);
+
+				// Moon scales from 0.85 to 1.0 to perfectly match Globe.svelte radius
+				const moonScale = 1.0 + (1.0 / 0.85 - 1.0) * posProgress;
+				distantMoon.scale.set(moonScale, moonScale, moonScale);
+
+				starSystem.update(camera, warpIntensity, flightDir);
+
+				if (t >= 1.0 && !flightCompleted) {
+					flightCompleted = true;
+					onComplete?.();
+				}
+			}
+
 			renderer.render(scene, camera);
 		}
 		animate();
@@ -300,13 +387,21 @@
 			earthGeometry.dispose();
 			earthMaterial.dispose();
 			earthTexture.dispose();
+			moonGeometry.dispose();
+			moonMaterial.dispose();
+			moonTexture.dispose();
 			starSystem.dispose();
 		};
 	});
 </script>
 
 <div class="space-viewport" bind:this={container}>
-	<div class="overlay-hint">Drag to rotate Earth &bull; Scroll to zoom</div>
+	{#if !isWarping}
+		<button class="travel-btn" onclick={() => triggerFlight?.()}>
+			[ TRAVEL TO MOON ]
+		</button>
+		<div class="overlay-hint">Drag to rotate Earth &bull; Scroll to zoom</div>
+	{/if}
 </div>
 
 <style>
@@ -322,6 +417,34 @@
 	.space-viewport:active {
 		cursor: grabbing;
 	}
+	.travel-btn {
+		position: absolute;
+		bottom: 64px;
+		left: 50%;
+		transform: translateX(-50%);
+		padding: 10px 26px;
+		background: rgba(255, 255, 255, 0.08);
+		color: #ffffff;
+		border: 1px solid rgba(255, 255, 255, 0.45);
+		border-radius: 4px;
+		font-family: "Jersey 25", sans-serif;
+		font-size: 22px;
+		letter-spacing: 1px;
+		cursor: pointer;
+		backdrop-filter: blur(8px);
+		box-shadow: 0 0 16px rgba(255, 255, 255, 0.15);
+		transition: all 0.25s ease;
+		z-index: 10;
+	}
+	.travel-btn:hover {
+		background: rgba(255, 255, 255, 0.22);
+		border-color: #ffffff;
+		box-shadow: 0 0 25px rgba(255, 255, 255, 0.45);
+		transform: translateX(-50%) scale(1.05);
+	}
+	.travel-btn:active {
+		transform: translateX(-50%) scale(0.97);
+	}
 	.overlay-hint {
 		position: absolute;
 		bottom: 24px;
@@ -329,7 +452,7 @@
 		transform: translateX(-50%);
 		color: rgba(255, 255, 255, 0.4);
 		font-family: "Jersey 25", sans-serif;
-		font-size: 20px;
+		font-size: 18px;
 		letter-spacing: 0.5px;
 		pointer-events: none;
 	}
