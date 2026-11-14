@@ -14,26 +14,159 @@
 	let cursorLineColor = $state('#ff5500');
 	let cursorShadowSize = $state(0.15);
 	let cursorShadowOpacity = $state(0.6);
+	let flareLength = $state(1.0); // Flare Length multiplier (1.0 = base max size; renders at 0.75x at default zoom)
 
 
 	let container;
 	let animId;
 
-	// Gentle radial glow for the visual Sun disk
-	function createSunGlowTexture() {
+	// High-resolution procedural textures for realistic solar appearance & halo rings
+	function createInnerCoronaTexture() {
 		const canvas = document.createElement('canvas');
-		canvas.width = 128;
-		canvas.height = 128;
+		canvas.width = 512;
+		canvas.height = 512;
 		const ctx = canvas.getContext('2d');
 
-		const gradient = ctx.createRadialGradient(64, 64, 0, 64, 64, 64);
-		gradient.addColorStop(0, 'rgba(255, 255, 255, 0.9)');
-		gradient.addColorStop(0.2, 'rgba(255, 245, 210, 0.55)');
-		gradient.addColorStop(0.5, 'rgba(255, 200, 120, 0.15)');
+		const gradient = ctx.createRadialGradient(256, 256, 0, 256, 256, 256);
+		gradient.addColorStop(0, 'rgba(255, 255, 255, 1.0)');
+		gradient.addColorStop(0.18, 'rgba(255, 252, 240, 0.95)');
+		gradient.addColorStop(0.38, 'rgba(255, 235, 185, 0.6)');
+		gradient.addColorStop(0.60, 'rgba(255, 205, 130, 0.22)');
+		gradient.addColorStop(0.82, 'rgba(255, 175, 75, 0.05)');
 		gradient.addColorStop(1, 'rgba(0, 0, 0, 0)');
 
 		ctx.fillStyle = gradient;
-		ctx.fillRect(0, 0, 128, 128);
+		ctx.fillRect(0, 0, 512, 512);
+
+		return new THREE.CanvasTexture(canvas);
+	}
+
+	function createOuterCoronaTexture() {
+		const canvas = document.createElement('canvas');
+		canvas.width = 512;
+		canvas.height = 512;
+		const ctx = canvas.getContext('2d');
+
+		const gradient = ctx.createRadialGradient(256, 256, 0, 256, 256, 256);
+		gradient.addColorStop(0, 'rgba(255, 245, 225, 0.7)');
+		gradient.addColorStop(0.22, 'rgba(255, 225, 170, 0.38)');
+		gradient.addColorStop(0.48, 'rgba(255, 185, 110, 0.15)');
+		gradient.addColorStop(0.72, 'rgba(255, 145, 65, 0.04)');
+		gradient.addColorStop(1, 'rgba(0, 0, 0, 0)');
+
+		ctx.fillStyle = gradient;
+		ctx.fillRect(0, 0, 512, 512);
+
+		return new THREE.CanvasTexture(canvas);
+	}
+
+	// Symmetrical diffraction rays matching ISS solar reference photo (colors matched to 0xfffaed)
+	function createSolarBeamTexture() {
+		const canvas = document.createElement('canvas');
+		canvas.width = 512;
+		canvas.height = 512;
+		const ctx = canvas.getContext('2d');
+		const cx = 256;
+		const cy = 256;
+
+		ctx.clearRect(0, 0, 512, 512);
+
+		// Core needle-sharp diffraction ray
+		const rayGrad = ctx.createLinearGradient(-256, 0, 256, 0);
+		rayGrad.addColorStop(0, 'rgba(255, 235, 180, 0)');
+		rayGrad.addColorStop(0.30, 'rgba(255, 245, 220, 0.20)');
+		rayGrad.addColorStop(0.50, 'rgba(255, 255, 255, 1.0)');
+		rayGrad.addColorStop(0.70, 'rgba(255, 245, 220, 0.20)');
+		rayGrad.addColorStop(1, 'rgba(255, 235, 180, 0)');
+
+		ctx.save();
+		ctx.translate(cx, cy);
+
+		ctx.fillStyle = rayGrad;
+		ctx.beginPath();
+		ctx.moveTo(-256, 0);
+		ctx.lineTo(0, -2.5);
+		ctx.lineTo(256, 0);
+		ctx.lineTo(0, 2.5);
+		ctx.closePath();
+		ctx.fill();
+
+		// Soft wider scattering ray envelope
+		const softGrad = ctx.createLinearGradient(-256, 0, 256, 0);
+		softGrad.addColorStop(0, 'rgba(255, 205, 130, 0)');
+		softGrad.addColorStop(0.35, 'rgba(255, 225, 175, 0.12)');
+		softGrad.addColorStop(0.50, 'rgba(255, 250, 237, 0.55)');
+		softGrad.addColorStop(0.65, 'rgba(255, 225, 175, 0.12)');
+		softGrad.addColorStop(1, 'rgba(255, 205, 130, 0)');
+
+		ctx.fillStyle = softGrad;
+		ctx.beginPath();
+		ctx.moveTo(-220, 0);
+		ctx.lineTo(0, -7);
+		ctx.lineTo(220, 0);
+		ctx.lineTo(0, 7);
+		ctx.closePath();
+		ctx.fill();
+
+		ctx.restore();
+
+		// Central bright hotspot blending the root into the sun
+		const centerGlow = ctx.createRadialGradient(cx, cy, 0, cx, cy, 40);
+		centerGlow.addColorStop(0, 'rgba(255, 255, 255, 1.0)');
+		centerGlow.addColorStop(0.45, 'rgba(255, 250, 237, 0.40)');
+		centerGlow.addColorStop(1, 'rgba(255, 235, 185, 0)');
+		ctx.fillStyle = centerGlow;
+		ctx.beginPath();
+		ctx.arc(cx, cy, 40, 0, Math.PI * 2);
+		ctx.fill();
+
+		return new THREE.CanvasTexture(canvas);
+	}
+
+	// Wide horizontal light scattering flare streak (anamorphic glare as depicted in reference photo)
+	function createLightScatteringStreakTexture() {
+		const canvas = document.createElement('canvas');
+		canvas.width = 512;
+		canvas.height = 128;
+		const ctx = canvas.getContext('2d');
+		const cx = 256;
+		const cy = 64;
+
+		ctx.clearRect(0, 0, 512, 128);
+
+		// 1. Core intense razor-sharp horizontal streak line
+		const coreGrad = ctx.createLinearGradient(0, cy, 512, cy);
+		coreGrad.addColorStop(0, 'rgba(255, 235, 180, 0)');
+		coreGrad.addColorStop(0.25, 'rgba(255, 245, 225, 0.35)');
+		coreGrad.addColorStop(0.50, 'rgba(255, 255, 255, 1.0)');
+		coreGrad.addColorStop(0.75, 'rgba(255, 245, 225, 0.35)');
+		coreGrad.addColorStop(1, 'rgba(255, 235, 180, 0)');
+
+		ctx.fillStyle = coreGrad;
+		ctx.beginPath();
+		ctx.moveTo(0, cy);
+		ctx.lineTo(cx, cy - 2.5);
+		ctx.lineTo(512, cy);
+		ctx.lineTo(cx, cy + 2.5);
+		ctx.closePath();
+		ctx.fill();
+
+		// 2. Diffuse scattering envelope with soft vertical gaussian falloff
+		const scatterGrad = ctx.createLinearGradient(0, cy, 512, cy);
+		scatterGrad.addColorStop(0, 'rgba(255, 205, 130, 0)');
+		scatterGrad.addColorStop(0.30, 'rgba(255, 230, 180, 0.20)');
+		scatterGrad.addColorStop(0.50, 'rgba(255, 250, 237, 0.65)');
+		scatterGrad.addColorStop(0.70, 'rgba(255, 230, 180, 0.20)');
+		scatterGrad.addColorStop(1, 'rgba(255, 205, 130, 0)');
+
+		ctx.fillStyle = scatterGrad;
+		ctx.beginPath();
+		ctx.moveTo(30, cy);
+		ctx.lineTo(cx, cy - 10);
+		ctx.lineTo(482, cy);
+		ctx.lineTo(cx, cy + 10);
+		ctx.closePath();
+		ctx.fill();
 
 		return new THREE.CanvasTexture(canvas);
 	}
@@ -296,26 +429,113 @@
 		// 5. Visual Sun in the background and directional lighting
 		const sunPos = new THREE.Vector3(28, 12, -45);
 
+		// 5a. Solar Photosphere core with limb darkening
 		const sunMesh = new THREE.Mesh(
-			new THREE.SphereGeometry(1.8, 32, 32),
-			new THREE.MeshBasicMaterial({ color: 0xffffff })
+			new THREE.SphereGeometry(1.8, 48, 48),
+			new THREE.ShaderMaterial({
+				vertexShader: /* glsl */`
+					varying vec3 vNormal;
+					void main() {
+						vNormal = normalize(normalMatrix * normal);
+						gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+					}
+				`,
+				fragmentShader: /* glsl */`
+					varying vec3 vNormal;
+					void main() {
+						float cosTheta = clamp(vNormal.z, 0.0, 1.0);
+						vec3 coreColor = vec3(1.0, 1.0, 1.0);
+						vec3 limbColor = vec3(1.0, 0.94, 0.82);
+						vec3 color = mix(limbColor, coreColor, pow(cosTheta, 0.4));
+						gl_FragColor = vec4(color, 1.0);
+					}
+				`
+			})
 		);
 		sunMesh.position.copy(sunPos);
 		scene.add(sunMesh);
 
-		const sunGlowTex = createSunGlowTexture();
-		const sunGlow = new THREE.Sprite(
+		// 5b. Inner high-intensity corona bloom
+		const innerCoronaTex = createInnerCoronaTexture();
+		const innerCorona = new THREE.Sprite(
 			new THREE.SpriteMaterial({
-				map: sunGlowTex,
+				map: innerCoronaTex,
+				blending: THREE.AdditiveBlending,
+				color: 0xffffff,
+				transparent: true,
+				opacity: 0.95,
+				depthWrite: false
+			})
+		);
+		innerCorona.position.copy(sunPos);
+		innerCorona.scale.set(7.5, 7.5, 1);
+		scene.add(innerCorona);
+
+		// 5c. Outer extended corona fading smoothly into deep space
+		const outerCoronaTex = createOuterCoronaTexture();
+		const outerCorona = new THREE.Sprite(
+			new THREE.SpriteMaterial({
+				map: outerCoronaTex,
 				blending: THREE.AdditiveBlending,
 				color: 0xffeedd,
 				transparent: true,
-				opacity: 0.6
+				opacity: 0.45,
+				depthWrite: false
 			})
 		);
-		sunGlow.position.copy(sunPos);
-		sunGlow.scale.set(10, 10, 1);
-		scene.add(sunGlow);
+		outerCorona.position.copy(sunPos);
+		outerCorona.scale.set(16, 16, 1);
+		scene.add(outerCorona);
+
+		// 5d. Horizontal anamorphic light scattering flare streak (recreating ISS photo)
+		const BASE_STREAK_LENGTH = 46;
+		const BASE_STREAK_THICKNESS = 2.6;
+		const BASE_MAJOR_RAY_SCALE = 30;
+		const BASE_MINOR_RAY_SCALE = 23;
+		const initialFlareScale = flareLength * 0.75;
+
+		const streakTex = createLightScatteringStreakTexture();
+		const horizontalStreak = new THREE.Sprite(
+			new THREE.SpriteMaterial({
+				map: streakTex,
+				blending: THREE.AdditiveBlending,
+				color: 0xfffaed, // exact project sun color
+				transparent: true,
+				opacity: 0.70,
+				depthWrite: false
+			})
+		);
+		horizontalStreak.position.copy(sunPos);
+		horizontalStreak.scale.set(BASE_STREAK_LENGTH * initialFlareScale, BASE_STREAK_THICKNESS * initialFlareScale, 1);
+		scene.add(horizontalStreak);
+
+		// 5e. Symmetrically rotated starburst diffraction light beams (16 rays = 8 crossing axes)
+		const beamTex = createSolarBeamTexture();
+		const raySprites = [];
+		const NUM_AXES = 8;
+		for (let i = 0; i < NUM_AXES; i++) {
+			const angle = i * (Math.PI / NUM_AXES); // symmetric rotation: 0, 22.5, 45, 67.5, 90, 112.5, 135, 157.5 deg
+			const isMajor = (i % 2 === 0);
+			const baseRayScale = isMajor ? BASE_MAJOR_RAY_SCALE : BASE_MINOR_RAY_SCALE;
+			const rayScale = baseRayScale * initialFlareScale;
+			const rayOpacity = isMajor ? 0.38 : 0.24;
+
+			const raySprite = new THREE.Sprite(
+				new THREE.SpriteMaterial({
+					map: beamTex,
+					blending: THREE.AdditiveBlending,
+					color: 0xfffaed, // exact project sun color
+					transparent: true,
+					opacity: rayOpacity,
+					rotation: angle,
+					depthWrite: false
+				})
+			);
+			raySprite.position.copy(sunPos);
+			raySprite.scale.set(rayScale, rayScale, 1);
+			scene.add(raySprite);
+			raySprites.push(raySprite);
+		}
 
 		// Directional sunlight from the Sun's position to illuminate the Moon & reveal surface displacement
 		const sunLight = new THREE.DirectionalLight(0xfffaed, 2.8);
@@ -528,10 +748,24 @@
 		window.addEventListener('resize', onResize);
 
 		// Render loop
-		function animate() {
+		function animate(timestamp) {
 			animId = requestAnimationFrame(animate);
 			controls.update();
 			starSystem.update(camera);
+
+			// Dynamic flare scaling proportional to page zoom
+			// Camera distance from Moon origin (0, 0, 0)
+			const camDist = camera.position.length();
+			// Linear mapping: at default distance (2.9) -> 0.75; at maxDistance (7.0) -> 1.0; at minDistance (1.3) -> ~0.65
+			const zoomProgress = (camDist - 2.9) / (controls.maxDistance - 2.9);
+			const zoomFactor = THREE.MathUtils.clamp(0.75 + zoomProgress * (1.0 - 0.75), 0.65, 1.0);
+			const currentFlareScale = flareLength * zoomFactor;
+
+			horizontalStreak.scale.set(BASE_STREAK_LENGTH * currentFlareScale, BASE_STREAK_THICKNESS * currentFlareScale, 1);
+			for (let i = 0; i < raySprites.length; i++) {
+				const baseRayScale = (i % 2 === 0) ? BASE_MAJOR_RAY_SCALE : BASE_MINOR_RAY_SCALE;
+				raySprites[i].scale.set(baseRayScale * currentFlareScale, baseRayScale * currentFlareScale, 1);
+			}
 
 			if (hasPointer) {
 				raycaster.setFromCamera(mouse, camera);
@@ -582,8 +816,16 @@
 			earthTexture.dispose();
 			sunMesh.geometry.dispose();
 			sunMesh.material.dispose();
-			sunGlow.material.dispose();
-			sunGlowTex.dispose();
+			innerCorona.material.dispose();
+			innerCoronaTex.dispose();
+			outerCorona.material.dispose();
+			outerCoronaTex.dispose();
+			horizontalStreak.material.dispose();
+			streakTex.dispose();
+			beamTex.dispose();
+			for (const ray of raySprites) {
+				ray.material.dispose();
+			}
 			starSystem.dispose();
 		};
 	});
