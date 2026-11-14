@@ -1,8 +1,9 @@
 import getLunarData from '../../backend/Lunarfunction.js';
 import * as THREE from 'three';
 
+const pad = (n) => String(n).padStart(2, '0');
+
 export function getDateRange20Days(baseDate = new Date()) {
-  const pad = (n) => String(n).padStart(2, '0');
   const hour = baseDate.getHours();
   const dStart = new Date(baseDate.getTime() - 10 * 86400000);
   const dEnd = new Date(baseDate.getTime() + 10 * 86400000);
