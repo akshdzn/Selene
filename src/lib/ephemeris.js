@@ -1,36 +1,108 @@
 import getLunarData from '../../backend/Lunarfunction.js';
 import * as THREE from 'three';
 
-export function getTodayDateRange() {
-  const now = new Date();
+export function getDateRange20Days(baseDate = new Date()) {
   const pad = (n) => String(n).padStart(2, '0');
-  const formatDate = (d) => `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+  const hour = baseDate.getHours();
+  const dStart = new Date(baseDate.getTime() - 10 * 86400000);
+  const dEnd = new Date(baseDate.getTime() + 10 * 86400000);
 
-  const startTime = formatDate(now);
-  const tomorrow = new Date(now.getTime() + 86400000);
-  const stopTime = formatDate(tomorrow);
+  const startTime = `${dStart.getFullYear()}-${pad(dStart.getMonth() + 1)}-${pad(dStart.getDate())} ${pad(hour)}:00`;
+  const stopTime = `${dEnd.getFullYear()}-${pad(dEnd.getMonth() + 1)}-${pad(dEnd.getDate())} ${pad(hour)}:00`;
 
-  return { startTime, stopTime, hour: now.getHours() };
+  return { startTime, stopTime, hour, startDate: dStart, endDate: dEnd, now: baseDate };
 }
 
+export function getTodayDateRange() {
+  return getDateRange20Days();
+}
+
+export const SUN_DISTANCE = 52.0;
+export const EARTH_DISTANCE = 28.0;
+
 /**
- * Converts Azimuth and Elevation (degrees) into a 3D Cartesian Vector3.
- * Coordinate frame aligned with Three.js scene:
- * - +Y: North (Moon's spin axis)
- * - +X: East
- * - +Z: Zenith (pointing toward Near-side observer/camera)
+ * Transforms topocentric (local observer horizon) Azimuth and Elevation at a given site (lat, lon)
+ * into a true Selenographic 3D Cartesian Vector3.
+ *
+ * Coordinate frame aligned with Moon body and Three.js scene:
+ * - +Y: North Pole (+90° lat)
+ * - +Z: Prime Meridian Center (0° lat, 0° lon)
+ * - +X: Eastern Limb (0° lat, +90° lon)
+ *
+ * Basis vectors:
+ * - Zenith: unit normal at (lat, lon) pointing radially outward from Moon center
+ * - North: tangent unit vector pointing toward North Pole (+Y) along meridian
+ * - East: tangent unit vector pointing toward East limb (+X) (East = North x Zenith)
+ * - Vector: sin(az)*cos(el)*East + cos(az)*cos(el)*North + sin(el)*Zenith
  */
-export function azElToVector3(azDeg, elDeg, radius) {
+export function topocentricToSelenographic(azDeg, elDeg, siteLatDeg = 0, siteLonDeg = 0, radius = 1.0) {
+  const latRad = (siteLatDeg * Math.PI) / 180;
+  const lonRad = (siteLonDeg * Math.PI) / 180;
   const azRad = (azDeg * Math.PI) / 180;
   const elRad = (elDeg * Math.PI) / 180;
+
+  const sinLat = Math.sin(latRad);
+  const cosLat = Math.cos(latRad);
+  const sinLon = Math.sin(lonRad);
+  const cosLon = Math.cos(lonRad);
+
+  const sinAz = Math.sin(azRad);
+  const cosAz = Math.cos(azRad);
+  const sinEl = Math.sin(elRad);
   const cosEl = Math.cos(elRad);
 
-  const x = radius * cosEl * Math.sin(azRad);
-  const y = radius * cosEl * Math.cos(azRad);
-  const z = radius * Math.sin(elRad);
+  // Basis vectors in Selenographic world coordinates:
+  const zx = cosLat * sinLon;
+  const zy = sinLat;
+  const zz = cosLat * cosLon;
+
+  const nx = -sinLat * sinLon;
+  const ny = cosLat;
+  const nz = -sinLat * cosLon;
+
+  const ex = cosLon;
+  const ey = 0;
+  const ez = -sinLon;
+
+  const x = radius * (cosEl * sinAz * ex + cosEl * cosAz * nx + sinEl * zx);
+  const y = radius * (cosEl * sinAz * ey + cosEl * cosAz * ny + sinEl * zy);
+  const z = radius * (cosEl * sinAz * ez + cosEl * cosAz * nz + sinEl * zz);
 
   return new THREE.Vector3(x, y, z);
 }
+
+/**
+ * Converts Azimuth and Elevation (degrees) into a 3D Cartesian Vector3 at the Moon center (0°N, 0°E).
+ */
+export function azElToVector3(azDeg, elDeg, radius = 1.0) {
+  return topocentricToSelenographic(azDeg, elDeg, 0, 0, radius);
+}
+
+/**
+ * Calculates 3D celestial positions and selenographic sub-solar / sub-earth coordinates
+ * for a given pair of Sun and Earth ephemeris entries at the observer site.
+ */
+export function calculateCelestialPositions(sunEntry, earthEntry, siteLatDeg = 0, siteLonDeg = 0) {
+  const sEntry = sunEntry || { angle: 90, elevation: -15 };
+  const eEntry = earthEntry || { angle: 0, elevation: 85 };
+
+  const sunPos = topocentricToSelenographic(sEntry.angle, sEntry.elevation, siteLatDeg, siteLonDeg, SUN_DISTANCE);
+  const earthPos = topocentricToSelenographic(eEntry.angle, eEntry.elevation, siteLatDeg, siteLonDeg, EARTH_DISTANCE);
+
+  const subSolar = vector3ToLatLon(sunPos);
+  const subEarth = vector3ToLatLon(earthPos);
+
+  return {
+    sunPos,
+    earthPos,
+    subSolar,
+    subEarth,
+    sunEntry: sEntry,
+    earthEntry: eEntry
+  };
+}
+
+
 
 /**
  * Converts a 3D unit vector or position on the Moon to Selenographic (lat, lon) in degrees.
@@ -76,20 +148,22 @@ export function formatLatLon(lat, lon) {
 }
 
 export async function fetchCurrentLunarPositions(lat = 0, lon = 0) {
-  const { startTime, stopTime, hour } = getTodayDateRange();
+  const { startTime, stopTime, hour, startDate, endDate, now } = getDateRange20Days();
   try {
     const data = await getLunarData(lat, lon, { startTime, stopTime });
-    const sunEntry = data.sun?.[hour] || data.sun?.[0] || { angle: 90, elevation: -15 };
-    const earthEntry = data.earth?.[hour] || data.earth?.[0] || { angle: 0, elevation: 85 };
+    const sunList = Array.isArray(data.sun) ? data.sun : [];
+    const earthList = Array.isArray(data.earth) ? data.earth : [];
 
-    const SUN_DISTANCE = 52.0;
-    const EARTH_DISTANCE = 28.0;
+    // In a 20-day range with 1h steps, 10 days * 24h = index 240 corresponds to today at current hour
+    let currentIndex = 240;
+    if (sunList.length > 0) {
+      if (currentIndex >= sunList.length) currentIndex = sunList.length - 1;
+    }
 
-    const sunPos = azElToVector3(sunEntry.angle, sunEntry.elevation, SUN_DISTANCE);
-    const earthPos = azElToVector3(earthEntry.angle, earthEntry.elevation, EARTH_DISTANCE);
+    const sunEntry = sunList[currentIndex] || sunList[0] || { angle: 90, elevation: -15, time: startTime };
+    const earthEntry = earthList[currentIndex] || earthList[0] || { angle: 0, elevation: 85, time: startTime };
 
-    const subSolar = vector3ToLatLon(sunPos);
-    const subEarth = vector3ToLatLon(earthPos);
+    const { sunPos, earthPos, subSolar, subEarth } = calculateCelestialPositions(sunEntry, earthEntry, lat, lon);
 
     return {
       sunPos,
@@ -99,23 +173,58 @@ export async function fetchCurrentLunarPositions(lat = 0, lon = 0) {
       sunEntry,
       earthEntry,
       hour,
+      currentIndex,
+      dataset: data,
+      timeRange: { startTime, stopTime, startDate, endDate },
       success: true
     };
   } catch (err) {
     console.warn('Ephemeris fetch fallback:', err);
-    const sunPos = new THREE.Vector3(28, 12, -45);
-    const earthPos = new THREE.Vector3(-14, 6, -24);
-    const subSolar = vector3ToLatLon(sunPos);
-    const subEarth = vector3ToLatLon(earthPos);
+    // Build synthetic 481-hour fallback dataset (20 days * 24 hours + 1)
+    const fallbackSun = [];
+    const fallbackEarth = [];
+    const totalSteps = 481;
+    const startMs = startDate.getTime();
+
+    for (let i = 0; i < totalSteps; i++) {
+      const stepDate = new Date(startMs + i * 3600000);
+      const angle = (i * 0.5) % 360;
+      // Solar elevation oscillates through lunar day/night (~29.5 day cycle)
+      const elev = 1.5 * Math.sin(((i - 120) / 480) * 2 * Math.PI);
+      const timeStr = `${stepDate.getFullYear()}-${String(stepDate.getMonth() + 1).padStart(2, '0')}-${String(stepDate.getDate()).padStart(2, '0')} ${String(stepDate.getHours()).padStart(2, '0')}:00`;
+
+      fallbackSun.push({ time: timeStr, angle, elevation: elev });
+      fallbackEarth.push({ time: timeStr, angle: 45, elevation: 5.0 });
+    }
+
+    const currentIndex = 240;
+    const sunEntry = fallbackSun[currentIndex];
+    const earthEntry = fallbackEarth[currentIndex];
+    const { sunPos, earthPos, subSolar, subEarth } = calculateCelestialPositions(sunEntry, earthEntry, lat, lon);
+
+    const fallbackDataset = {
+      coordinates: { latitude: lat, longitude: lon, altitudeKm: 0, elevationM: 0 },
+      sun: fallbackSun,
+      earth: fallbackEarth,
+      summary: {
+        'Power %': 50,
+        'Comms %': 100,
+        'Both %': 50,
+        bestWindow: null
+      }
+    };
 
     return {
       sunPos,
       earthPos,
       subSolar,
       subEarth,
-      sunEntry: { angle: 90, elevation: -15 },
-      earthEntry: { angle: 0, elevation: 85 },
+      sunEntry,
+      earthEntry,
       hour,
+      currentIndex,
+      dataset: fallbackDataset,
+      timeRange: { startTime, stopTime, startDate, endDate },
       success: false
     };
   }

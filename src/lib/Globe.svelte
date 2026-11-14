@@ -3,12 +3,17 @@
 	import * as THREE from 'three';
 	import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
 	import UTIF from 'three/examples/jsm/libs/utif.module.js';
-	import { fetchCurrentLunarPositions, vector3ToLatLon, formatLatLon } from './ephemeris.js';
+	import { fetchCurrentLunarPositions, vector3ToLatLon, latLonToVector3, formatLatLon } from './ephemeris.js';
 	import moonUrl from '../assets/moon.webp';
 	import moonDisplacementUrl from '../assets/moon_displacement.tif';
 	import earthUrl from '../assets/earth.jpg';
 
-	let { lunarPositions = null } = $props();
+	let {
+		lunarPositions = null,
+		selectedCoords = null,
+		onCoordinateSelect = null,
+		isCalculating = false
+	} = $props();
 
 	let cursorRadius = $state(0.026);
 	let cursorThickness = $state(0.006);
@@ -33,6 +38,18 @@
 	let raySpritesRef = [];
 	let sunLightRef;
 	let earthMeshRef;
+	let selectedCursorRef;
+
+	$effect(() => {
+		const targetLat = selectedCoords?.lat ?? lunarPositions?.dataset?.coordinates?.latitude;
+		const targetLon = selectedCoords?.lon ?? lunarPositions?.dataset?.coordinates?.longitude;
+		if (typeof targetLat === 'number' && typeof targetLon === 'number' && selectedCursorRef) {
+			const normal = latLonToVector3(targetLat, targetLon, 1.0).normalize();
+			selectedCursorRef.position.copy(normal).multiplyScalar(1.003);
+			selectedCursorRef.quaternion.setFromUnitVectors(new THREE.Vector3(0, 0, 1), normal);
+			selectedCursorRef.visible = true;
+		}
+	});
 
 	function updateCelestialPositions(positions) {
 		if (!positions) return;
@@ -589,6 +606,8 @@
 		// Directional sunlight from the Sun's position to illuminate the Moon & reveal surface displacement
 		const sunLight = new THREE.DirectionalLight(0xfffaed, 2.8);
 		sunLight.position.copy(sunPos);
+		sunLight.target.position.set(0, 0, 0);
+		scene.add(sunLight.target);
 		scene.add(sunLight);
 		sunLightRef = sunLight;
 
@@ -773,10 +792,46 @@
 		cursor.visible = false;
 		scene.add(cursor);
 
+		// 9. Red 3D selected coordinate cursor pinned to chosen site on Moon
+		const selCursorGeo = new THREE.RingGeometry(cursorRadius - cursorThickness / 2, cursorRadius + cursorThickness / 2, 64);
+		const selCursorMat = new THREE.MeshBasicMaterial({
+			color: 0xff2600,
+			side: THREE.DoubleSide,
+			transparent: true,
+			depthTest: false,
+			depthWrite: false
+		});
+		const selectedCursor = new THREE.Mesh(selCursorGeo, selCursorMat);
+		selectedCursor.renderOrder = 3;
+
+		const selLineMat = new THREE.MeshBasicMaterial({
+			color: 0xff2600,
+			transparent: true,
+			depthTest: false,
+			depthWrite: false
+		});
+		const selLine = new THREE.Mesh(lineGeo, selLineMat);
+		selLine.renderOrder = 4;
+		selLine.scale.set(lineR, lineR, cursorLineLength);
+		selectedCursor.add(selLine);
+
+		selectedCursor.visible = false;
+		scene.add(selectedCursor);
+		selectedCursorRef = selectedCursor;
+
+		const UP_Z = new THREE.Vector3(0, 0, 1);
+		const initLat = selectedCoords?.lat ?? lunarPositions?.dataset?.coordinates?.latitude ?? 26.1322;
+		const initLon = selectedCoords?.lon ?? lunarPositions?.dataset?.coordinates?.longitude ?? 3.6339;
+		if (typeof initLat === 'number' && typeof initLon === 'number') {
+			const normal = latLonToVector3(initLat, initLon, 1.0).normalize();
+			selectedCursor.position.copy(normal).multiplyScalar(1.003);
+			selectedCursor.quaternion.setFromUnitVectors(UP_Z, normal);
+			selectedCursor.visible = true;
+		}
+
 		const raycaster = new THREE.Raycaster();
 		const mouse = new THREE.Vector2(-1000, -1000);
 		const cursorNormal = new THREE.Vector3();
-		const UP_Z = new THREE.Vector3(0, 0, 1);
 		let hasPointer = false;
 
 		function onPointerMove(e) {
@@ -792,8 +847,26 @@
 			cursorCoords = null;
 		}
 
+		function onDoubleClick(e) {
+			if (isCalculating || !container) return;
+			const rect = container.getBoundingClientRect();
+			mouse.x = ((e.clientX - rect.left) / rect.width) * 2 - 1;
+			mouse.y = -((e.clientY - rect.top) / rect.height) * 2 + 1;
+			raycaster.setFromCamera(mouse, camera);
+			const intersects = raycaster.intersectObject(moon);
+			if (intersects.length > 0) {
+				e.preventDefault();
+				e.stopPropagation();
+				const hitPoint = intersects[0].point;
+				const norm = hitPoint.clone().normalize();
+				const { lat, lon } = vector3ToLatLon(norm);
+				onCoordinateSelect?.({ lat, lon });
+			}
+		}
+
 		container.addEventListener('pointermove', onPointerMove);
 		container.addEventListener('pointerleave', onPointerLeave);
+		container.addEventListener('dblclick', onDoubleClick);
 
 		// Window resize
 		function onResize() {
@@ -858,10 +931,14 @@
 			window.removeEventListener('resize', onResize);
 			container.removeEventListener('pointermove', onPointerMove);
 			container.removeEventListener('pointerleave', onPointerLeave);
+			container.removeEventListener('dblclick', onDoubleClick);
 			controls.dispose();
 			renderer.dispose();
 			cursorGeo.dispose();
 			cursorMat.dispose();
+			selCursorGeo.dispose();
+			selCursorMat.dispose();
+			selLineMat.dispose();
 			shadowGeo.dispose();
 			shadowMat.dispose();
 			shadowTexture.dispose();
@@ -912,7 +989,6 @@
 			</div>
 		{/if}
 	</div>
-	<div class="overlay-hint">Drag to rotate the Moon &bull; Scroll to zoom</div>
 </div>
 
 <style>
@@ -958,16 +1034,5 @@
 		color: #ffaa44;
 		font-family: monospace;
 		font-size: 14px;
-	}
-	.overlay-hint {
-		position: absolute;
-		bottom: 24px;
-		left: 50%;
-		transform: translateX(-50%);
-		color: rgba(255, 255, 255, 0.4);
-		font-family: "Jersey 25", sans-serif;
-		font-size: 20px;
-		letter-spacing: 0.5px;
-		pointer-events: none;
 	}
 </style>
