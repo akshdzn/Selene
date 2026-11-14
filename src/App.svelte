@@ -17,6 +17,7 @@
   let ephemerisLoaded = $state(false);
   let isCalculatingEphemeris = $state(false);
   let currentPlayheadTime = $state('');
+  let hoveredCoords = $state(null);
 
   onMount(async () => {
     lunarPositions = await fetchCurrentLunarPositions(lat, lon);
@@ -76,6 +77,7 @@
         lunarPositions={activeLunarPositions || lunarPositions}
         selectedCoords={{ lat, lon }}
         onCoordinateSelect={handleCoordinateSelect}
+        onHoverCoords={(coords) => (hoveredCoords = coords)}
         isCalculating={isCalculatingEphemeris}
       />
     </div>
@@ -89,6 +91,7 @@
       <Timeline
         {lunarPositions}
         onTimeChange={handlePlayheadChange}
+        {hoveredCoords}
       />
     {/if}
   {/if}

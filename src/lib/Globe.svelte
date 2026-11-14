@@ -15,6 +15,7 @@
 		lunarPositions = null,
 		selectedCoords = null,
 		onCoordinateSelect = null,
+		onHoverCoords = null,
 		isCalculating = false
 	} = $props();
 
@@ -860,7 +861,10 @@
 		function onPointerLeave() {
 			hasPointer = false;
 			cursor.visible = false;
-			cursorCoords = null;
+			if (cursorCoords !== null) {
+				cursorCoords = null;
+				onHoverCoords?.(null);
+			}
 			hoveredPlace = null;
 			if (container) container.style.cursor = '';
 		}
@@ -984,6 +988,7 @@
 					cursor.quaternion.setFromUnitVectors(UP_Z, cursorNormal);
 					const { lat, lon } = vector3ToLatLon(cursorNormal);
 					cursorCoords = formatLatLon(lat, lon);
+					onHoverCoords?.(cursorCoords);
 					const lineR = cursorLineThickness / 2;
 					line.scale.set(lineR, lineR, cursorLineLength);
 					lineMat.color.set(cursorLineColor);
@@ -991,7 +996,10 @@
 					shadowMesh.scale.set(cursorShadowSize, cursorShadowSize, 1);
 					cursor.visible = !currentHovered;
 				} else {
-					cursorCoords = null;
+					if (cursorCoords !== null) {
+						cursorCoords = null;
+						onHoverCoords?.(null);
+					}
 					cursor.visible = false;
 				}
 			} else {
@@ -1058,25 +1066,6 @@
 </script>
 
 <div class="space-viewport" bind:this={container}>
-	<div class="hud-panel">
-		<div class="hud-item">
-			<span class="hud-label">COORDINATES:</span>
-			<span class="hud-val">{cursorCoords ? cursorCoords.full : 'HOVER MOON'}</span>
-		</div>
-		{#if subSolarCoords}
-			<div class="hud-item">
-				<span class="hud-label">SUB-SOLAR:</span>
-				<span class="hud-val">{subSolarCoords.full}</span>
-			</div>
-		{/if}
-		{#if subEarthCoords}
-			<div class="hud-item">
-				<span class="hud-label">SUB-EARTH:</span>
-				<span class="hud-val">{subEarthCoords.full}</span>
-			</div>
-		{/if}
-	</div>
-
 	{#if hoveredPlace}
 		<div
 			class="place-hover-box {hoverBoxPos.isNearTop ? 'is-below' : 'is-above'}"
@@ -1100,37 +1089,6 @@
 	}
 	.space-viewport:active {
 		cursor: grabbing;
-	}
-	.hud-panel {
-		position: absolute;
-		top: 24px;
-		left: 24px;
-		display: flex;
-		flex-direction: column;
-		gap: 6px;
-		padding: 12px 18px;
-		background: rgba(10, 10, 16, 0.7);
-		border: 1px solid rgba(255, 255, 255, 0.15);
-		border-radius: 6px;
-		backdrop-filter: blur(10px);
-		font-family: "Jersey 25", sans-serif;
-		letter-spacing: 0.8px;
-		pointer-events: none;
-		z-index: 10;
-	}
-	.hud-item {
-		display: flex;
-		align-items: center;
-		gap: 8px;
-		font-size: 16px;
-	}
-	.hud-label {
-		color: rgba(255, 255, 255, 0.5);
-	}
-	.hud-val {
-		color: #ffaa44;
-		font-family: monospace;
-		font-size: 14px;
 	}
 	.place-hover-box {
 		position: absolute;

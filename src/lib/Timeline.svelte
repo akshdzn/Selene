@@ -1,10 +1,12 @@
 <script>
   import { onMount, onDestroy } from 'svelte';
   import { calculateCelestialPositions } from './ephemeris.js';
+  import Scritto from "@scritto/svelte";
 
   let {
     lunarPositions = null,
-    onTimeChange = null
+    onTimeChange = null,
+    hoveredCoords = null
   } = $props();
 
   // Reactive state
@@ -453,7 +455,9 @@
         }}
         title="Click to toggle start and end dates"
       >
-        <span class="badge-text">{isExpanded ? b.dateText : b.statsText}</span>
+        <span class="badge-text">
+            <Scritto value={isExpanded ? b.dateText : b.statsText} />
+        </span>
       </div>
     {/each}
 
@@ -566,11 +570,11 @@
   <!-- Bottom Info Row (below track bar) -->
   <div class="bottom-info-row">
     <div class="bottom-left-time">
-      <span class="info-date">{formattedTime.dateStr}</span>
-      <span class="info-time">{formattedTime.timeStr}</span>
+        <span>{formattedTime.dateStr}</span>
+        <span>{formattedTime.timeStr}</span>
     </div>
-    <div class="bottom-right-hint">
-      Drag to rotate the Moon | Scroll to zoom
+    <div class="bottom-right-hint {hoveredCoords ? 'is-coords' : ''}">
+      {hoveredCoords ? (hoveredCoords.full || `${hoveredCoords.latStr}, ${hoveredCoords.lonStr}`) : 'Drag to rotate the Moon | Scroll to zoom'}
     </div>
   </div>
 </div>
@@ -830,5 +834,11 @@
     font-size: 15px;
     font-weight: 700;
     letter-spacing: 0.2px;
+    transition: color 0.15s ease;
+  }
+
+  .bottom-right-hint.is-coords {
+    color: #ffffff;
+    letter-spacing: 0.5px;
   }
 </style>
