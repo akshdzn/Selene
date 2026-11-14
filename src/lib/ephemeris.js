@@ -32,6 +32,49 @@ export function azElToVector3(azDeg, elDeg, radius) {
   return new THREE.Vector3(x, y, z);
 }
 
+/**
+ * Converts a 3D unit vector or position on the Moon to Selenographic (lat, lon) in degrees.
+ * Coordinate mapping:
+ * - +Y: North Pole (+90°N)
+ * - -Y: South Pole (-90°S)
+ * - +Z: Near-side Center (0° lat, 0° lon)
+ * - +X: Eastern Limb (0° lat, +90° lon)
+ * - -X: Western Limb (0° lat, -90° lon)
+ * - -Z: Farside Center (0° lat, 180° lon)
+ */
+export function vector3ToLatLon(vec) {
+  const norm = vec.clone().normalize();
+  const lat = Math.asin(Math.max(-1, Math.min(1, norm.y))) * (180 / Math.PI);
+  const lon = Math.atan2(norm.x, norm.z) * (180 / Math.PI);
+  return { lat, lon };
+}
+
+/**
+ * Converts Selenographic (lat, lon) in degrees to a 3D Vector3 at the specified radius.
+ */
+export function latLonToVector3(latDeg, lonDeg, radius = 1.0) {
+  const latRad = (latDeg * Math.PI) / 180;
+  const lonRad = (lonDeg * Math.PI) / 180;
+  const cosLat = Math.cos(latRad);
+
+  const x = radius * cosLat * Math.sin(lonRad);
+  const y = radius * Math.sin(latRad);
+  const z = radius * cosLat * Math.cos(lonRad);
+
+  return new THREE.Vector3(x, y, z);
+}
+
+/**
+ * Formats (lat, lon) in degrees to a clean human-readable string (e.g. "14.2°N, 45.1°E").
+ */
+export function formatLatLon(lat, lon) {
+  const latNum = Number(lat) || 0;
+  const lonNum = Number(lon) || 0;
+  const latStr = `${Math.abs(latNum).toFixed(1)}°${latNum >= 0 ? 'N' : 'S'}`;
+  const lonStr = `${Math.abs(lonNum).toFixed(1)}°${lonNum >= 0 ? 'E' : 'W'}`;
+  return { latStr, lonStr, full: `${latStr}, ${lonStr}` };
+}
+
 export async function fetchCurrentLunarPositions(lat = 0, lon = 0) {
   const { startTime, stopTime, hour } = getTodayDateRange();
   try {
@@ -45,9 +88,14 @@ export async function fetchCurrentLunarPositions(lat = 0, lon = 0) {
     const sunPos = azElToVector3(sunEntry.angle, sunEntry.elevation, SUN_DISTANCE);
     const earthPos = azElToVector3(earthEntry.angle, earthEntry.elevation, EARTH_DISTANCE);
 
+    const subSolar = vector3ToLatLon(sunPos);
+    const subEarth = vector3ToLatLon(earthPos);
+
     return {
       sunPos,
       earthPos,
+      subSolar,
+      subEarth,
       sunEntry,
       earthEntry,
       hour,
@@ -55,9 +103,16 @@ export async function fetchCurrentLunarPositions(lat = 0, lon = 0) {
     };
   } catch (err) {
     console.warn('Ephemeris fetch fallback:', err);
+    const sunPos = new THREE.Vector3(28, 12, -45);
+    const earthPos = new THREE.Vector3(-14, 6, -24);
+    const subSolar = vector3ToLatLon(sunPos);
+    const subEarth = vector3ToLatLon(earthPos);
+
     return {
-      sunPos: new THREE.Vector3(28, 12, -45),
-      earthPos: new THREE.Vector3(-14, 6, -24),
+      sunPos,
+      earthPos,
+      subSolar,
+      subEarth,
       sunEntry: { angle: 90, elevation: -15 },
       earthEntry: { angle: 0, elevation: 85 },
       hour,

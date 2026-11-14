@@ -27,6 +27,8 @@
 		const moonDir = positions.earthPos.clone().negate().normalize();
 		moonPos.copy(moonDir.multiplyScalar(28.0));
 		distantMoonMesh.position.copy(moonPos);
+		// Tidal locking: Near-side (0°N, 0°E) faces Earth at origin (0, 0, 0)
+		distantMoonMesh.lookAt(0, 0, 0);
 		endCamPos.set(moonPos.x, moonPos.y, moonPos.z + 2.9);
 		endTarget.copy(moonPos);
 		earthMesh.visible = true;
@@ -305,13 +307,14 @@
 		moonTexture.colorSpace = THREE.SRGBColorSpace;
 
 		const moonGeometry = new THREE.SphereGeometry(0.85, 48, 48);
+		moonGeometry.rotateY(-Math.PI / 2);
 		const moonMaterial = new THREE.MeshBasicMaterial({
 			map: moonTexture
 		});
 		const distantMoon = new THREE.Mesh(moonGeometry, moonMaterial);
 		distantMoon.name = 'distantMoon';
 		distantMoon.position.copy(moonPos);
-		distantMoon.rotation.y = -Math.PI / 2; // Near-side facing toward camera
+		distantMoon.lookAt(0, 0, 0); // Near-side (0°N, 0°E) faces Earth at (0, 0, 0)
 		scene.add(distantMoon);
 
 		// 6. Hero Object: Earth (100% visible, unlit flat texture, 23.44° axial tilt)

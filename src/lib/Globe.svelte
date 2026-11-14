@@ -3,7 +3,7 @@
 	import * as THREE from 'three';
 	import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
 	import UTIF from 'three/examples/jsm/libs/utif.module.js';
-	import { fetchCurrentLunarPositions } from './ephemeris.js';
+	import { fetchCurrentLunarPositions, vector3ToLatLon, formatLatLon } from './ephemeris.js';
 	import moonUrl from '../assets/moon.webp';
 	import moonDisplacementUrl from '../assets/moon_displacement.tif';
 	import earthUrl from '../assets/earth.jpg';
@@ -17,6 +17,10 @@
 	let cursorLineColor = $state('#ff5500');
 	let cursorShadowSize = $state(0.15);
 	let cursorShadowOpacity = $state(0.6);
+
+	let cursorCoords = $state(null);
+	let subSolarCoords = $state(null);
+	let subEarthCoords = $state(null);
 
 	let container;
 	let animId;
@@ -32,9 +36,13 @@
 			sunMeshRef?.position.copy(positions.sunPos);
 			sunGlowRef?.position.copy(positions.sunPos);
 			sunLightRef?.position.copy(positions.sunPos);
+			const { lat, lon } = vector3ToLatLon(positions.sunPos);
+			subSolarCoords = formatLatLon(lat, lon);
 		}
 		if (positions.earthPos) {
 			earthMeshRef?.position.copy(positions.earthPos);
+			const { lat, lon } = vector3ToLatLon(positions.earthPos);
+			subEarthCoords = formatLatLon(lat, lon);
 		}
 	}
 
@@ -383,6 +391,9 @@
 		moonTexture.colorSpace = THREE.SRGBColorSpace;
 
 		const moonGeometry = new THREE.SphereGeometry(1.0, 256, 256);
+		// Bake Selenographic alignment into geometry: (0° lat, 0° lon) is along +Z, North is +Y, East is +X
+		moonGeometry.rotateY(-Math.PI / 2);
+
 		const moonMaterial = new THREE.MeshStandardMaterial({
 			map: moonTexture,
 			displacementScale: 0.001,
@@ -480,8 +491,7 @@
 		});
 
 		const moon = new THREE.Mesh(moonGeometry, moonMaterial);
-		// Align near-side (0° lon) to initially face the camera
-		moon.rotation.y = -Math.PI / 2;
+		// Selenographic orientation baked into moonGeometry: (0°N, 0°E) faces +Z directly
 		scene.add(moon);
 
 		// 8. 3D surface cursor (white circular outline hovering over moon surface)
@@ -548,6 +558,7 @@
 		function onPointerLeave() {
 			hasPointer = false;
 			cursor.visible = false;
+			cursorCoords = null;
 		}
 
 		container.addEventListener('pointermove', onPointerMove);
@@ -578,6 +589,8 @@
 					cursorNormal.copy(hitPoint).normalize();
 					cursor.position.copy(hitPoint).addScaledVector(cursorNormal, 0.003);
 					cursor.quaternion.setFromUnitVectors(UP_Z, cursorNormal);
+					const { lat, lon } = vector3ToLatLon(cursorNormal);
+					cursorCoords = formatLatLon(lat, lon);
 					const lineR = cursorLineThickness / 2;
 					line.scale.set(lineR, lineR, cursorLineLength);
 					lineMat.color.set(cursorLineColor);
@@ -585,6 +598,7 @@
 					shadowMesh.scale.set(cursorShadowSize, cursorShadowSize, 1);
 					cursor.visible = true;
 				} else {
+					cursorCoords = null;
 					cursor.visible = false;
 				}
 			}
@@ -627,6 +641,24 @@
 </script>
 
 <div class="space-viewport" bind:this={container}>
+	<div class="hud-panel">
+		<div class="hud-item">
+			<span class="hud-label">COORDINATES:</span>
+			<span class="hud-val">{cursorCoords ? cursorCoords.full : 'HOVER MOON'}</span>
+		</div>
+		{#if subSolarCoords}
+			<div class="hud-item">
+				<span class="hud-label">SUB-SOLAR:</span>
+				<span class="hud-val">{subSolarCoords.full}</span>
+			</div>
+		{/if}
+		{#if subEarthCoords}
+			<div class="hud-item">
+				<span class="hud-label">SUB-EARTH:</span>
+				<span class="hud-val">{subEarthCoords.full}</span>
+			</div>
+		{/if}
+	</div>
 	<div class="overlay-hint">Drag to rotate the Moon &bull; Scroll to zoom</div>
 </div>
 
@@ -642,6 +674,37 @@
 	}
 	.space-viewport:active {
 		cursor: grabbing;
+	}
+	.hud-panel {
+		position: absolute;
+		top: 24px;
+		left: 24px;
+		display: flex;
+		flex-direction: column;
+		gap: 6px;
+		padding: 12px 18px;
+		background: rgba(10, 10, 16, 0.7);
+		border: 1px solid rgba(255, 255, 255, 0.15);
+		border-radius: 6px;
+		backdrop-filter: blur(10px);
+		font-family: "Jersey 25", sans-serif;
+		letter-spacing: 0.8px;
+		pointer-events: none;
+		z-index: 10;
+	}
+	.hud-item {
+		display: flex;
+		align-items: center;
+		gap: 8px;
+		font-size: 16px;
+	}
+	.hud-label {
+		color: rgba(255, 255, 255, 0.5);
+	}
+	.hud-val {
+		color: #ffaa44;
+		font-family: monospace;
+		font-size: 14px;
 	}
 	.overlay-hint {
 		position: absolute;
