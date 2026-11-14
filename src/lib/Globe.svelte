@@ -4,7 +4,10 @@
 	import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
 	import moonUrl from '../assets/moon.webp';
 	import earthUrl from '../assets/earth.jpg';
-	
+
+	let cursorRadius = $state(0.026);
+	let cursorThickness = $state(0.006);
+
 
 	let container;
 	let animId;
@@ -335,6 +338,38 @@
 		moon.rotation.y = -Math.PI / 2;
 		scene.add(moon);
 
+		// 8. 3D surface cursor (white circular outline hovering over moon surface)
+		const cursorGeo = new THREE.RingGeometry(cursorRadius - cursorThickness / 2, cursorRadius + cursorThickness / 2, 64);
+		const cursorMat = new THREE.MeshBasicMaterial({
+			color: 0xffffff,
+			side: THREE.DoubleSide,
+			depthWrite: false
+		});
+		const cursor = new THREE.Mesh(cursorGeo, cursorMat);
+		cursor.visible = false;
+		scene.add(cursor);
+
+		const raycaster = new THREE.Raycaster();
+		const mouse = new THREE.Vector2(-1000, -1000);
+		const cursorNormal = new THREE.Vector3();
+		const UP_Z = new THREE.Vector3(0, 0, 1);
+		let hasPointer = false;
+
+		function onPointerMove(e) {
+			const rect = container.getBoundingClientRect();
+			mouse.x = ((e.clientX - rect.left) / rect.width) * 2 - 1;
+			mouse.y = -((e.clientY - rect.top) / rect.height) * 2 + 1;
+			hasPointer = true;
+		}
+
+		function onPointerLeave() {
+			hasPointer = false;
+			cursor.visible = false;
+		}
+
+		container.addEventListener('pointermove', onPointerMove);
+		container.addEventListener('pointerleave', onPointerLeave);
+
 		// Window resize
 		function onResize() {
 			if (!container) return;
@@ -351,6 +386,21 @@
 			animId = requestAnimationFrame(animate);
 			controls.update();
 			starSystem.update(camera);
+
+			if (hasPointer) {
+				raycaster.setFromCamera(mouse, camera);
+				const intersects = raycaster.intersectObject(moon);
+				if (intersects.length > 0) {
+					const hitPoint = intersects[0].point;
+					cursorNormal.copy(hitPoint).normalize();
+					cursor.position.copy(hitPoint).addScaledVector(cursorNormal, 0.003);
+					cursor.quaternion.setFromUnitVectors(UP_Z, cursorNormal);
+					cursor.visible = true;
+				} else {
+					cursor.visible = false;
+				}
+			}
+
 			renderer.render(scene, camera);
 		}
 		animate();
@@ -359,8 +409,12 @@
 		return () => {
 			cancelAnimationFrame(animId);
 			window.removeEventListener('resize', onResize);
+			container.removeEventListener('pointermove', onPointerMove);
+			container.removeEventListener('pointerleave', onPointerLeave);
 			controls.dispose();
 			renderer.dispose();
+			cursorGeo.dispose();
+			cursorMat.dispose();
 			moonGeometry.dispose();
 			moonMaterial.dispose();
 			moonTexture.dispose();
