@@ -2,21 +2,55 @@
   import { onMount } from 'svelte';
   import Globe from './lib/Globe.svelte';
   import LandingPage from './lib/landing.svelte';
+  import Timeline from './lib/Timeline.svelte';
   import { fetchCurrentLunarPositions } from './lib/ephemeris.js';
 
   let showLanding = $state(true);
   let showGlobe = $state(false);
   let landingOpacity = $state(1);
 
-  let lat = $state(0);
-  let lon = $state(0);
+  // Apollo 15 landing site (Hadley-Apennine region: 26.1322°N, 3.6339°E)
+  let lat = $state(26.1322);
+  let lon = $state(3.6339);
   let lunarPositions = $state(null);
+  let activeLunarPositions = $state(null);
   let ephemerisLoaded = $state(false);
+  let isCalculatingEphemeris = $state(false);
+  let currentPlayheadTime = $state('');
 
   onMount(async () => {
     lunarPositions = await fetchCurrentLunarPositions(lat, lon);
+    activeLunarPositions = lunarPositions;
+    currentPlayheadTime = lunarPositions?.sunEntry?.time || '';
     ephemerisLoaded = true;
   });
+
+  async function handleCoordinateSelect(coords) {
+    if (isCalculatingEphemeris) return;
+    lat = Number(coords.lat.toFixed(4));
+    lon = Number(coords.lon.toFixed(4));
+    isCalculatingEphemeris = true;
+
+    try {
+      const newPositions = await fetchCurrentLunarPositions(lat, lon);
+      lunarPositions = newPositions;
+      activeLunarPositions = newPositions;
+      currentPlayheadTime = newPositions?.sunEntry?.time || '';
+    } catch (err) {
+      console.error('Failed to calculate ephemeris for chosen coordinates:', err);
+    } finally {
+      isCalculatingEphemeris = false;
+    }
+  }
+
+  function handlePlayheadChange(event) {
+    currentPlayheadTime = event.time;
+    activeLunarPositions = {
+      ...lunarPositions,
+      ...event.celestialPositions,
+      hour: event.index % 24
+    };
+  }
 
   function handleTransitionToMoon() {
     // 1. Mount Globe underneath LandingPage (LandingPage is still opacity: 1)
@@ -38,8 +72,25 @@
 <main class="app-viewport">
   {#if showGlobe}
     <div class="view-layer globe-layer">
-      <Globe {lunarPositions} />
+      <Globe
+        lunarPositions={activeLunarPositions || lunarPositions}
+        selectedCoords={{ lat, lon }}
+        onCoordinateSelect={handleCoordinateSelect}
+        isCalculating={isCalculatingEphemeris}
+      />
     </div>
+
+    {#if isCalculatingEphemeris}
+      <div class="ephemeris-loading-hud">
+        <div class="pulse-dot"></div>
+        <span>ACQUIRING LUNAR EPHEMERIS FROM HORIZONS...</span>
+      </div>
+    {:else}
+      <Timeline
+        {lunarPositions}
+        onTimeChange={handlePlayheadChange}
+      />
+    {/if}
   {/if}
 
   {#if showLanding}
@@ -76,5 +127,47 @@
   }
   .globe-layer {
     z-index: 1;
+  }
+
+  /* Loading HUD shown when calculating new ephemeris after double clicking coordinate */
+  .ephemeris-loading-hud {
+    position: absolute;
+    bottom: 50px;
+    left: 50%;
+    transform: translateX(-50%);
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    padding: 14px 28px;
+    background: rgba(0, 0, 0, 0.7);
+    border: 1px solid rgba(255, 255, 255, 0.25);
+    border-radius: 4px;
+    color: rgba(255, 255, 255, 0.85);
+    font-family: 'Space Grotesk', sans-serif;
+    font-size: 15px;
+    font-weight: 700;
+    letter-spacing: 0.5px;
+    backdrop-filter: blur(20px);
+    -webkit-backdrop-filter: blur(20px);
+    z-index: 10;
+    pointer-events: none;
+    user-select: none;
+  }
+  .pulse-dot {
+    width: 10px;
+    height: 10px;
+    border-radius: 50%;
+    background: #ff5500;
+    animation: pulse 1.2s infinite ease-in-out;
+  }
+  @keyframes pulse {
+    0%, 100% {
+      opacity: 0.3;
+      transform: scale(0.8);
+    }
+    50% {
+      opacity: 1;
+      transform: scale(1.2);
+    }
   }
 </style>
