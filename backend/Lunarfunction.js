@@ -1,29 +1,60 @@
 // Fetch Sun and Earth azimuth/elevation from a lunar south pole point with DEM terrain occlusion.
 // Run: node backend/Lunarfunction.js  (Node 18+)
 
-export const lat = 26.13;
-export const lon = 3.63;  // apollo 15
+export const lat = 45.4561;
+export const lon = 177.5885;  // Von Kármán Crater
 
 export const SUN_RADIUS = 0.27;   // degrees
 export const EARTH_MIN_ELEV = 2;  // degrees; set to 0 for the ideal case
 export const R_MOON = 1737400.0;  // mean lunar radius in meters
+
+let cachedDem = null;
+
+const DEFAULT_META_80M = {
+  width: 1896,
+  height: 1896,
+  dtype: "int16",
+  endian: "little",
+  scale: 0.5,
+  offset: 1737400.0,
+  metersPerPixel: 80.0,
+  projection: "polar stereographic, south pole, center lon 0",
+  refRadiusKm: 1737.4,
+  maxLat: -87.5,
+  minLat: -90.0,
+  lineProjectionOffset: 947.875,
+  sampleProjectionOffset: 947.875,
+  source: "LDEM_875S_20M.IMG",
+};
+
+const DEFAULT_META_320M = {
+  width: 1900,
+  height: 1900,
+  dtype: "int16",
+  endian: "little",
+  scale: 0.5,
+  offset: 1737400.0,
+  metersPerPixel: 320.0,
+  projection: "polar stereographic, south pole, center lon 0",
+  refRadiusKm: 1737.4,
+};
 
 /**
  * Loads the LOLA Digital Elevation Model (DEM) and metadata.
  * Works in both browser environments (fetch) and Node.js environments (fs fallback).
  */
 export async function loadDem(
-  binSource = "south_pole_875s_80m.bin",
-  jsonSource = "south_pole_875s_80m.bin.json"
+  binSource = null,
+  jsonSource = null
 ) {
   let meta, buf;
 
   // Node.js local filesystem loader
   if (typeof process !== "undefined" && process.versions?.node) {
     try {
-      const fs = await import("node:fs");
-      const path = await import("node:path");
-      const { fileURLToPath } = await import("node:url");
+      const fs = await import(/* @vite-ignore */ "node:fs");
+      const path = await import(/* @vite-ignore */ "node:path");
+      const { fileURLToPath } = await import(/* @vite-ignore */ "node:url");
 
       const scriptDir = path.dirname(fileURLToPath(import.meta.url));
       const candidates = [
@@ -35,21 +66,25 @@ export async function loadDem(
       ];
 
       const searchSources = [
-        { b: binSource, j: jsonSource },
-        { b: "south_pole_320m.bin", j: "south_pole_320m.bin.json" },
+        { b: binSource || "south_pole_875s_80m.bin", j: jsonSource || "south_pole_875s_80m.bin.json", defaultMeta: DEFAULT_META_80M },
+        { b: "south_pole_320m.bin", j: "south_pole_320m.bin.json", defaultMeta: DEFAULT_META_320M },
       ];
 
       for (const src of searchSources) {
         for (const getPath of candidates) {
           const jPath = getPath(src.j);
           const bPath = getPath(src.b);
-          if (fs.existsSync(jPath) && fs.existsSync(bPath)) {
-            meta = JSON.parse(fs.readFileSync(jPath, "utf8"));
+          if (fs.existsSync(bPath)) {
             const fileBuf = fs.readFileSync(bPath);
             buf = fileBuf.buffer.slice(
               fileBuf.byteOffset,
               fileBuf.byteOffset + fileBuf.byteLength
             );
+            if (fs.existsSync(jPath)) {
+              meta = JSON.parse(fs.readFileSync(jPath, "utf8"));
+            } else {
+              meta = src.defaultMeta;
+            }
             break;
           }
         }
@@ -62,13 +97,38 @@ export async function loadDem(
 
   // Web fetch loader (browser / URL fallback)
   if (!meta || !buf) {
-    try {
-      meta = await (await fetch(jsonSource)).json();
-      buf = await (await fetch(binSource)).arrayBuffer();
-    } catch {
-      meta = await (await fetch("south_pole_320m.bin.json")).json();
-      buf = await (await fetch("south_pole_320m.bin")).arrayBuffer();
+    const defaultBin = new URL("./south_pole_875s_80m.bin", import.meta.url).href;
+    const defaultJson = new URL("./south_pole_875s_80m.bin.json", import.meta.url).href;
+    const candidates = [
+      { b: binSource || defaultBin, j: jsonSource || defaultJson, defaultMeta: DEFAULT_META_80M },
+      { b: "/backend/south_pole_875s_80m.bin", j: "/backend/south_pole_875s_80m.bin.json", defaultMeta: DEFAULT_META_80M },
+      { b: new URL("./south_pole_320m.bin", import.meta.url).href, j: new URL("./south_pole_320m.bin.json", import.meta.url).href, defaultMeta: DEFAULT_META_320M },
+      { b: "/backend/south_pole_320m.bin", j: "/backend/south_pole_320m.bin.json", defaultMeta: DEFAULT_META_320M },
+    ];
+
+    for (const c of candidates) {
+      try {
+        const bRes = await fetch(c.b);
+        if (!bRes.ok) continue;
+        buf = await bRes.arrayBuffer();
+
+        try {
+          const jRes = await fetch(c.j);
+          if (jRes.ok) {
+            meta = await jRes.json();
+          }
+        } catch {}
+
+        if (!meta) meta = c.defaultMeta;
+        if (buf && meta) break;
+      } catch {
+        // try next candidate
+      }
     }
+  }
+
+  if (!meta || !buf) {
+    throw new Error("Failed to load lunar DEM data (both local filesystem and web fetch failed).");
   }
 
   const dem = new Int16Array(buf); // length = width * height
@@ -297,8 +357,15 @@ export async function getSky(
   siteLon = lon,
   siteAltKm = 0,
   startTime = "1969-07-20",
-  stopTime = "1969-07-21"
+  stopTime = "1969-07-21",
+  options = {}
 ) {
+  const isBrowser = typeof window !== "undefined";
+  const defaultBase = isBrowser
+    ? "/api/horizons"
+    : "https://ssd.jpl.nasa.gov/api/horizons.api";
+  const baseUrl = options.horizonsUrl || defaultBase;
+
   const params = new URLSearchParams({
     format: "json",
     COMMAND: `'${bodyId}'`,              // 10 = Sun, 399 = Earth
@@ -314,23 +381,47 @@ export async function getSky(
     CSV_FORMAT: "'YES'",
   });
 
-  const res = await fetch(`https://ssd.jpl.nasa.gov/api/horizons.api?${params}`);
+  const res = await fetch(`${baseUrl}?${params}`);
+  if (!res.ok) {
+    throw new Error(`Horizons API request failed: HTTP ${res.status} ${res.statusText}`);
+  }
   const { result } = await res.json();
   return parseEphemeris(result);
 }
 
 /**
  * Performs complete site analysis including DEM altitude and topographic horizon occlusion.
+ * Callable directly with just (lat, lon) or with optional DEM data / settings.
  */
-export async function analyzeSite(targetLat, targetLon, demData, options = {}) {
+export async function analyzeSite(targetLat = lat, targetLon = lon, demDataOrOptions = null, options = {}) {
+  let demData = null;
+  let opts = {};
+
+  if (demDataOrOptions && (demDataOrOptions.meta || demDataOrOptions.dem || demDataOrOptions.heightM)) {
+    demData = demDataOrOptions;
+    opts = options || {};
+  } else if (demDataOrOptions && typeof demDataOrOptions === "object") {
+    opts = demDataOrOptions;
+    demData = opts.demData || null;
+  } else {
+    opts = options || {};
+  }
+
+  if (!demData) {
+    if (!cachedDem) {
+      cachedDem = await loadDem();
+    }
+    demData = cachedDem;
+  }
+
   const site = getSiteElevation(targetLat, targetLon, demData);
-  const horizonMask = computeHorizonMask(targetLat, targetLon, demData, options);
+  const horizonMask = computeHorizonMask(targetLat, targetLon, demData, opts);
 
-  const startTime = options.startTime || "2027-01-01";
-  const stopTime = options.stopTime || "2027-01-31";
+  const startTime = opts.startTime || "2027-01-01";
+  const stopTime = opts.stopTime || "2027-01-31";
 
-  const sun = await getSky(10, targetLat, targetLon, site.altitudeKm, startTime, stopTime);
-  const earth = await getSky(399, targetLat, targetLon, site.altitudeKm, startTime, stopTime);
+  const sun = await getSky(10, targetLat, targetLon, site.altitudeKm, startTime, stopTime, opts);
+  const earth = await getSky(399, targetLat, targetLon, site.altitudeKm, startTime, stopTime, opts);
 
   const summary = summarize(sun, earth, horizonMask);
 
@@ -349,6 +440,9 @@ export async function analyzeSite(targetLat, targetLon, demData, options = {}) {
   };
 }
 
+export const getLunarData = analyzeSite;
+export default analyzeSite;
+
 // Auto-run if executed directly as entrypoint
 const isMain =
   typeof process !== "undefined" &&
@@ -359,10 +453,8 @@ const isMain =
 if (isMain) {
   (async () => {
     try {
-      console.log(`Loading DEM...`);
-      const demData = await loadDem();
       console.log(`Analyzing site lat=${lat.toFixed(4)}, lon=${lon.toFixed(4)}...`);
-      const result = await analyzeSite(lat, lon, demData);
+      const result = await analyzeSite(lat, lon);
       console.log(
         JSON.stringify(
           {
