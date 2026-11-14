@@ -4,13 +4,21 @@
 	import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
 	import earthUrl from '../assets/earth.jpg';
 	import moonUrl from '../assets/moon.webp';
+	import Info from './info.svelte';
 
 	let { onComplete, lunarPositions = null, isLoaded = false } = $props();
 
 	let container;
 	let animId;
 	let isWarping = $state(false);
+	let showInfo = $state(false);
 	let triggerFlight;
+
+	function handleKeydown(e) {
+		if (e.key === 'Escape' && showInfo) {
+			showInfo = false;
+		}
+	}
 
 	let distantMoonMesh;
 	let earthMesh;
@@ -427,6 +435,8 @@
 	});
 </script>
 
+<svelte:window onkeydown={handleKeydown} />
+
 <div class="space-viewport" bind:this={container}>
 	{#if !isLoaded}
 		<div class="loading-hud">
@@ -437,7 +447,38 @@
 		<button class="travel-btn" onclick={() => triggerFlight?.()}>
 			[ TRAVEL TO MOON ]
 		</button>
+		<button class="info-btn" onclick={() => (showInfo = !showInfo)}>
+			[ INFO ]
+		</button>
 		<div class="overlay-hint">Drag to rotate Earth &bull; Scroll to zoom</div>
+	{/if}
+
+	{#if showInfo}
+		<div
+			class="info-popup-backdrop"
+			role="button"
+			tabindex="0"
+			onclick={() => (showInfo = false)}
+			onkeydown={(e) => { if (e.key === 'Enter' || e.key === ' ') showInfo = false; }}
+		>
+			<div
+				class="info-popup-card"
+				role="dialog"
+				aria-modal="true"
+				tabindex="-1"
+				onclick={(e) => e.stopPropagation()}
+				onkeydown={(e) => e.stopPropagation()}
+			>
+				<div class="info-popup-header">
+					<button class="info-close-btn" onclick={() => (showInfo = false)}>
+						[ CLOSE ]
+					</button>
+				</div>
+				<div class="info-popup-body">
+					<Info />
+				</div>
+			</div>
+		</div>
 	{/if}
 </div>
 
@@ -507,6 +548,120 @@
 	}
 	.travel-btn:active {
 		transform: translateX(-50%) scale(0.97);
+	}
+	.info-btn {
+		position: absolute;
+		bottom: 32px;
+		left: 32px;
+		padding: 10px 26px;
+		background: rgba(255, 255, 255, 0.08);
+		color: #ffffff;
+		border: 1px solid rgba(255, 255, 255, 0.45);
+		border-radius: 4px;
+		font-family: "Jersey 25", sans-serif;
+		font-size: 22px;
+		letter-spacing: 1px;
+		cursor: pointer;
+		backdrop-filter: blur(8px);
+		box-shadow: 0 0 16px rgba(255, 255, 255, 0.15);
+		transition: all 0.25s ease;
+		z-index: 10;
+	}
+	.info-btn:hover {
+		background: rgba(255, 255, 255, 0.22);
+		border-color: #ffffff;
+		box-shadow: 0 0 25px rgba(255, 255, 255, 0.45);
+		transform: scale(1.05);
+	}
+	.info-btn:active {
+		transform: scale(0.97);
+	}
+	.info-popup-backdrop {
+		position: absolute;
+		inset: 0;
+		background: rgba(0, 0, 0, 0.65);
+		backdrop-filter: blur(4px);
+		display: flex;
+		align-items: center;
+		justify-content: center;
+		z-index: 50;
+		animation: fadeIn 0.15s ease-out;
+	}
+	.info-popup-card {
+		position: relative;
+		width: 90vw;
+		max-width: 600px;
+		max-height: 82vh;
+		padding: 24px 28px;
+		background: rgba(10, 10, 16, 0.88);
+		color: #ffffff;
+		border: 1px solid rgba(255, 255, 255, 0.45);
+		border-radius: 4px;
+		font-family: "Jersey 25", sans-serif;
+		letter-spacing: 1px;
+		backdrop-filter: blur(14px);
+		-webkit-backdrop-filter: blur(14px);
+		box-shadow: 0 0 30px rgba(0, 0, 0, 0.8), 0 0 20px rgba(255, 255, 255, 0.12);
+		display: flex;
+		flex-direction: column;
+		gap: 16px;
+		overflow-y: auto;
+		animation: scaleUp 0.18s ease-out;
+		z-index: 51;
+	}
+	.info-popup-card::-webkit-scrollbar {
+		width: 6px;
+	}
+	.info-popup-card::-webkit-scrollbar-track {
+		background: rgba(255, 255, 255, 0.04);
+		border-radius: 3px;
+	}
+	.info-popup-card::-webkit-scrollbar-thumb {
+		background: rgba(255, 255, 255, 0.25);
+		border-radius: 3px;
+	}
+	.info-popup-card::-webkit-scrollbar-thumb:hover {
+		background: rgba(255, 255, 255, 0.45);
+	}
+	.info-popup-header {
+		display: flex;
+		justify-content: flex-end;
+		align-items: center;
+	}
+	.info-close-btn {
+		padding: 6px 18px;
+		background: rgba(255, 255, 255, 0.08);
+		color: #ffffff;
+		border: 1px solid rgba(255, 255, 255, 0.45);
+		border-radius: 4px;
+		font-family: "Jersey 25", sans-serif;
+		font-size: 18px;
+		letter-spacing: 1px;
+		cursor: pointer;
+		backdrop-filter: blur(8px);
+		box-shadow: 0 0 10px rgba(255, 255, 255, 0.1);
+		transition: all 0.2s ease;
+	}
+	.info-close-btn:hover {
+		background: rgba(255, 255, 255, 0.22);
+		border-color: #ffffff;
+		box-shadow: 0 0 16px rgba(255, 255, 255, 0.35);
+		transform: scale(1.04);
+	}
+	.info-close-btn:active {
+		transform: scale(0.96);
+	}
+	.info-popup-body {
+		display: flex;
+		flex-direction: column;
+	}
+	@keyframes fadeIn {
+		from { opacity: 0; }
+		to { opacity: 1; }
+	}
+	@keyframes scaleUp {
+		from { opacity: 0; transform: scale(0.94); }
+		to { opacity: 1; transform: scale(1); }
 	}
 	.overlay-hint {
 		position: absolute;
