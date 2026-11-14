@@ -7,6 +7,11 @@
 
 	let cursorRadius = $state(0.026);
 	let cursorThickness = $state(0.006);
+	let cursorLineLength = $state(0.07);
+	let cursorLineThickness = $state(0.006);
+	let cursorLineColor = $state('#ff5500');
+	let cursorShadowSize = $state(0.15);
+	let cursorShadowOpacity = $state(0.6);
 
 
 	let container;
@@ -343,9 +348,43 @@
 		const cursorMat = new THREE.MeshBasicMaterial({
 			color: 0xffffff,
 			side: THREE.DoubleSide,
+			transparent: true,
 			depthWrite: false
 		});
 		const cursor = new THREE.Mesh(cursorGeo, cursorMat);
+		cursor.renderOrder = 1;
+
+		// Shadow plane under the cursor circle
+		const shadowTexture = textureLoader.load('/cursor-shadow.png');
+		shadowTexture.colorSpace = THREE.SRGBColorSpace;
+		const shadowGeo = new THREE.PlaneGeometry(1, 1);
+		const shadowMat = new THREE.MeshBasicMaterial({
+			map: shadowTexture,
+			transparent: true,
+			opacity: cursorShadowOpacity,
+			depthWrite: false
+		});
+		const shadowMesh = new THREE.Mesh(shadowGeo, shadowMat);
+		shadowMesh.renderOrder = 0;
+		shadowMesh.position.z = -0.001; // under the cursor circle and line
+		shadowMesh.scale.set(cursorShadowSize, cursorShadowSize, 1);
+		cursor.add(shadowMesh);
+
+		// Normal indicator line pointing outward from cursor center
+		const lineGeo = new THREE.CylinderGeometry(1, 1, 1, 16);
+		lineGeo.rotateX(Math.PI / 2);
+		lineGeo.translate(0, 0, 0.5);
+		const lineMat = new THREE.MeshBasicMaterial({
+			color: cursorLineColor,
+			transparent: true,
+			depthWrite: false
+		});
+		const line = new THREE.Mesh(lineGeo, lineMat);
+		line.renderOrder = 2;
+		const lineR = cursorLineThickness / 2;
+		line.scale.set(lineR, lineR, cursorLineLength);
+		cursor.add(line);
+
 		cursor.visible = false;
 		scene.add(cursor);
 
@@ -395,6 +434,11 @@
 					cursorNormal.copy(hitPoint).normalize();
 					cursor.position.copy(hitPoint).addScaledVector(cursorNormal, 0.003);
 					cursor.quaternion.setFromUnitVectors(UP_Z, cursorNormal);
+					const lineR = cursorLineThickness / 2;
+					line.scale.set(lineR, lineR, cursorLineLength);
+					lineMat.color.set(cursorLineColor);
+					shadowMat.opacity = cursorShadowOpacity;
+					shadowMesh.scale.set(cursorShadowSize, cursorShadowSize, 1);
 					cursor.visible = true;
 				} else {
 					cursor.visible = false;
@@ -415,6 +459,11 @@
 			renderer.dispose();
 			cursorGeo.dispose();
 			cursorMat.dispose();
+			shadowGeo.dispose();
+			shadowMat.dispose();
+			shadowTexture.dispose();
+			lineGeo.dispose();
+			lineMat.dispose();
 			moonGeometry.dispose();
 			moonMaterial.dispose();
 			moonTexture.dispose();
