@@ -1,0 +1,16 @@
+{
+  "width": 1896,
+  "height": 1896,
+  "dtype": "int16",
+  "endian": "little",
+  "scale": 0.5,
+  "offset": 1737400.0,
+  "metersPerPixel": 80.0,
+  "projection": "polar stereographic, south pole, center lon 0",
+  "refRadiusKm": 1737.4,
+  "maxLat": -87.5,
+  "minLat": -90.0,
+  "lineProjectionOffset": 947.875,
+  "sampleProjectionOffset": 947.875,
+  "source": "LDEM_875S_20M.IMG"
+}

@@ -26,3 +26,6 @@ dist-ssr
 # Data files
 backend/LDEM_80S_80M.LBL
 backend/LDEM_80S_80M.IMG
+backend/LDEM_875S_5M.LBL
+backend/LDEM_875S_20M.IMG
+backend/LDEM_875S_20M.LBL
