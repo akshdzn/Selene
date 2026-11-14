@@ -86,6 +86,48 @@
     return listB.some((b) => Math.max(runA.start, b.start) <= Math.min(runA.end, b.end));
   }
 
+  let expandedBadgeKeys = $state(new Set());
+
+  function toggleBadge(badgeKey) {
+    const updated = new Set(expandedBadgeKeys);
+    if (updated.has(badgeKey)) {
+      updated.delete(badgeKey);
+    } else {
+      updated.add(badgeKey);
+    }
+    expandedBadgeKeys = updated;
+  }
+
+  function formatRangeDateText(type, start, end) {
+    const startEntry = sunList[start];
+    const endEntry = sunList[Math.min(end, sunList.length - 1)];
+    const startTimeStr = startEntry?.time || '';
+    const endTimeStr = endEntry?.time || '';
+
+    const parseDate = (str) => {
+      if (!str) return null;
+      const m = str.trim().match(/^(\d{4})-([A-Za-z0-9]+)-(\d{1,2})/);
+      if (!m) return null;
+      const year = m[1];
+      let month = m[2].toUpperCase();
+      const day = m[3].padStart(2, '0');
+      if (/^\d+$/.test(month)) {
+        const months = ['JAN', 'FEB', 'MAR', 'APR', 'MAY', 'JUN', 'JUL', 'AUG', 'SEP', 'OCT', 'NOV', 'DEC'];
+        month = months[parseInt(month, 10) - 1] || month;
+      }
+      return { year, month, day, str: `${month} ${day}` };
+    };
+
+    const d1 = parseDate(startTimeStr);
+    const d2 = parseDate(endTimeStr);
+
+    if (d1 && d2) {
+      return `${type} | ${d1.str} ${d1.year} – ${d2.str} ${d2.year}`;
+    }
+
+    return `${type} | STEP ${start} – ${end}`;
+  }
+
   // Calculate stacked start badges above the timeline track
   let stackedBadges = $derived.by(() => {
     const list = [];
@@ -100,43 +142,55 @@
 
     for (const r of intervals.dark) {
       if (r.end - r.start > 12) {
+        const key = `DARK-${r.start}-${r.end}`;
         list.push({
+          key,
           type: 'DARK',
           start: r.start,
           end: r.end,
           rank: 0,
-          text: formatBadgeText('DARK', r.start, r.end),
+          statsText: formatBadgeText('DARK', r.start, r.end),
+          dateText: formatRangeDateText('DARK', r.start, r.end),
           className: 'badge-dark'
         });
       }
     }
     for (const r of intervals.power) {
+      const key = `POWER-${r.start}-${r.end}`;
       list.push({
+        key,
         type: 'POWER',
         start: r.start,
         end: r.end,
         rank: 0,
-        text: formatBadgeText('POWER', r.start, r.end),
+        statsText: formatBadgeText('POWER', r.start, r.end),
+        dateText: formatRangeDateText('POWER', r.start, r.end),
         className: 'badge-power'
       });
     }
     for (const r of intervals.comms) {
+      const key = `COMMS-${r.start}-${r.end}`;
       list.push({
+        key,
         type: 'COMMS',
         start: r.start,
         end: r.end,
         rank: 1,
-        text: formatBadgeText('COMMS', r.start, r.end),
+        statsText: formatBadgeText('COMMS', r.start, r.end),
+        dateText: formatRangeDateText('COMMS', r.start, r.end),
         className: 'badge-comms'
       });
     }
     for (const r of intervals.optimal) {
+      const key = `OPTIMAL-${r.start}-${r.end}`;
       list.push({
+        key,
         type: 'OPTIMAL',
         start: r.start,
         end: r.end,
         rank: 2,
-        text: formatBadgeText('OPTIMAL', r.start, r.end),
+        statsText: formatBadgeText('OPTIMAL', r.start, r.end),
+        dateText: formatRangeDateText('OPTIMAL', r.start, r.end),
         className: 'badge-optimal'
       });
     }
@@ -385,19 +439,29 @@
 <div class="timeline-wrapper">
   <!-- Top Labels & Badges Row (Stacked dynamically so higher labels sit on top of bottom ones) -->
   <div class="badges-row">
-    {#each stackedBadges as b}
+    {#each stackedBadges as b (b.key)}
+      {@const isUnderPlayhead = currentPlayheadIndex >= b.start && currentPlayheadIndex <= b.end}
+      {@const isExpanded = expandedBadgeKeys.has(b.key)}
+      <!-- svelte-ignore a11y_click_events_have_key_events -->
+      <!-- svelte-ignore a11y_no_static_element_interactions -->
       <div
-        class="badge-item {b.className}"
-        style="left: {b.leftPct}%; bottom: {b.bottomOffset}px;"
+        class="badge-item {b.className} {isUnderPlayhead ? 'is-under-playhead' : 'is-outside-playhead'}"
+        style="left: {b.leftPct}%; bottom: {b.bottomOffset}px; opacity: {isUnderPlayhead ? 1 : 0.5};"
+        onclick={(e) => {
+          e.stopPropagation();
+          toggleBadge(b.key);
+        }}
+        title="Click to toggle start and end dates"
       >
-        <span class="badge-text">{b.text}</span>
+        <span class="badge-text">{isExpanded ? b.dateText : b.statsText}</span>
       </div>
     {/each}
 
     {#each stackedEndIndicators as item}
+      {@const isUnderPlayhead = currentPlayheadIndex >= item.start && currentPlayheadIndex <= item.end}
       <div
         class="end-tick {item.tickClass}"
-        style="left: {item.endPct}%; bottom: {item.bottomOffset}px;"
+        style="left: {item.endPct}%; bottom: {item.bottomOffset}px; opacity: {isUnderPlayhead ? 1 : 0.5};"
       ></div>
     {/each}
   </div>
@@ -547,7 +611,13 @@
     border-radius: 1px;
     white-space: nowrap;
     z-index: 5;
-    transition: bottom 0.15s ease-out;
+    cursor: pointer;
+    pointer-events: auto;
+    transition: bottom 0.15s ease-out, opacity 0.2s ease;
+  }
+
+  .badge-item:hover {
+    opacity: 1 !important;
   }
 
   .badge-optimal {
@@ -578,7 +648,7 @@
     height: 26px;
     transform: translateX(-100%);
     z-index: 4;
-    transition: bottom 0.15s ease-out;
+    transition: bottom 0.15s ease-out, opacity 0.2s ease;
   }
 
   .tick-optimal {

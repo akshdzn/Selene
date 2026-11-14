@@ -231,4 +231,50 @@ assert.equal(testIndex, 240, 'ArrowLeft steps -1 hour backward');
 assert.equal(clampIndex(count + 1), count, 'Clamps at end');
 assert.equal(clampIndex(-1), 0, 'Clamps at start');
 
+// 6. Test Playhead Range Overlap Opacity (100% when under playhead, 50% otherwise)
+const checkOpacity = (rangeStart, rangeEnd, playheadIdx) => {
+  return playheadIdx >= rangeStart && playheadIdx <= rangeEnd ? 1.0 : 0.5;
+};
+
+// At index 240 (Apollo 15 Lunar Night):
+// DARK: 0..288, POWER: 288..480, COMMS: 0..480, OPTIMAL: 288..480
+assert.equal(checkOpacity(0, 288, 240), 1.0, 'DARK label opacity is 100% when under playhead');
+assert.equal(checkOpacity(0, 480, 240), 1.0, 'COMMS label opacity is 100% when under playhead');
+assert.equal(checkOpacity(288, 480, 240), 0.5, 'POWER label opacity is 50% when not under playhead');
+assert.equal(checkOpacity(288, 480, 240), 0.5, 'OPTIMAL label opacity is 50% when not under playhead');
+
+// At index 350 (Apollo 15 Lunar Daytime):
+assert.equal(checkOpacity(0, 288, 350), 0.5, 'DARK label opacity dims to 50% after sunrise');
+assert.equal(checkOpacity(288, 480, 350), 1.0, 'POWER label opacity illuminates to 100% during day');
+assert.equal(checkOpacity(288, 480, 350), 1.0, 'OPTIMAL label opacity illuminates to 100% during day');
+assert.equal(checkOpacity(0, 480, 350), 1.0, 'COMMS label opacity remains 100%');
+
+// 7. Test Label Click Date Range Formatting
+function formatRangeDateText(type, startTimeStr, endTimeStr) {
+  const parseDate = (str) => {
+    if (!str) return null;
+    const m = str.trim().match(/^(\d{4})-([A-Za-z0-9]+)-(\d{1,2})/);
+    if (!m) return null;
+    const year = m[1];
+    let month = m[2].toUpperCase();
+    const day = m[3].padStart(2, '0');
+    return { year, month, day, str: `${month} ${day}` };
+  };
+  const d1 = parseDate(startTimeStr);
+  const d2 = parseDate(endTimeStr);
+  if (d1 && d2) {
+    return `${type} | ${d1.str} ${d1.year} – ${d2.str} ${d2.year}`;
+  }
+  return type;
+}
+
+const commsDateText = formatRangeDateText('COMMS', '2026-Nov-05 01:00', '2026-Nov-25 01:00');
+assert.equal(commsDateText, 'COMMS | NOV 05 2026 – NOV 25 2026');
+
+const powerDateText = formatRangeDateText('POWER', '2026-Nov-16 19:00', '2026-Nov-25 01:00');
+assert.equal(powerDateText, 'POWER | NOV 16 2026 – NOV 25 2026');
+
+const darkDateText = formatRangeDateText('DARK', '2026-Nov-05 01:00', '2026-Nov-16 19:00');
+assert.equal(darkDateText, 'DARK | NOV 05 2026 – NOV 16 2026');
+
 console.log('All timeline logic and overlap checks passed successfully.');
