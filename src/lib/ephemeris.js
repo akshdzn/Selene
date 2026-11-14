@@ -147,6 +147,70 @@ export function formatLatLon(lat, lon) {
   return { latStr, lonStr, full: `${latStr}, ${lonStr}` };
 }
 
+/**
+ * Converts signed decimal coordinates into readable directional coordinates (N, S, E, W)
+ * based on the Selenographic coordinate frame:
+ * - Latitude: North-positive (>= 0 is N, < 0 is S)
+ * - Longitude: East-positive (>= 0 is E, < 0 is W)
+ *
+ * @param {number|string} lat Signed latitude in decimal degrees (-90 to +90)
+ * @param {number|string} lon Signed longitude in decimal degrees (-180 to +180)
+ * @param {object} [options]
+ * @param {number|null} [options.precision=null] Decimal places to round to (null preserves exact precision)
+ * @param {string} [options.space=''] Space between degrees and direction ("47.77°S" vs "47.77° S")
+ * @returns {object} Formatted directional coordinate object
+ */
+export function convertToDirectionalCoords(lat, lon, options = {}) {
+  const { precision = null, space = '' } = options;
+
+  const latNum = Number(lat) || 0;
+  const lonNum = Number(lon) || 0;
+
+  const latDir = latNum >= 0 ? 'N' : 'S';
+  const lonDir = lonNum >= 0 ? 'E' : 'W';
+
+  const absLat = Math.abs(latNum);
+  const absLon = Math.abs(lonNum);
+
+  const latValStr = precision !== null ? absLat.toFixed(precision) : String(absLat);
+  const lonValStr = precision !== null ? absLon.toFixed(precision) : String(absLon);
+
+  const latStr = `${latValStr}°${space}${latDir}`;
+  const lonStr = `${lonValStr}°${space}${lonDir}`;
+
+  return {
+    latStr,
+    lonStr,
+    latitude: latStr,
+    longitude: lonStr,
+    text: `${latStr}, ${lonStr}`,
+    full: `${latStr}, ${lonStr}`,
+    latDir,
+    lonDir,
+    latVal: absLat,
+    lonVal: absLon,
+    rawLat: latNum,
+    rawLon: lonNum
+  };
+}
+
+/**
+ * Convenience helper to convert a place object (e.g. from Places.json).
+ *
+ * @param {object} place Place object with latitude and longitude properties
+ * @param {object} [options]
+ * @returns {object} Augmented place object with directional coordinate strings
+ */
+export function convertPlaceCoordinates(place, options = {}) {
+  if (!place || typeof place !== 'object') return null;
+  const directional = convertToDirectionalCoords(place.latitude, place.longitude, options);
+  return {
+    ...place,
+    directionalCoords: directional,
+    coordsFormatted: directional.text
+  };
+}
+
 export async function fetchCurrentLunarPositions(lat = 0, lon = 0) {
   const { startTime, stopTime, hour, startDate, endDate, now } = getDateRange20Days();
   try {
