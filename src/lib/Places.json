@@ -1,0 +1,62 @@
+{
+  "coordinates": "Decimal degrees; latitude north-positive, longitude east-positive",
+  "source": "IAU/USGS Gazetteer of Planetary Nomenclature",
+  "locations": [
+    {
+      "name": "Oceanus Procellarum",
+      "type": "Oceanus (Lunar plain)",
+      "latitude": 20.6714,
+      "longitude": -56.6774,
+      "diameter_km": 2592.238
+    },
+    {
+      "name": "Mare Frigoris",
+      "type": "Mare (Lunar plain)",
+      "latitude": 57.5923,
+      "longitude": -0.0064,
+      "diameter_km": 1446.406
+    },
+    {
+      "name": "Mare Imbrium",
+      "type": "Mare (Lunar plain)",
+      "latitude": 34.7244,
+      "longitude": -14.9086,
+      "diameter_km": 1145.528
+    },
+    {
+      "name": "Mare Australe",
+      "type": "Mare (Lunar plain)",
+      "latitude": -47.7705,
+      "longitude": 91.9854,
+      "diameter_km": 996.84
+    },
+    {
+      "name": "Montes Cordillera",
+      "type": "Montes (Mountain range)",
+      "latitude": -19.4358,
+      "longitude": -94.931,
+      "diameter_km": 963.501
+    },
+    {
+      "name": "Mare Tranquillitatis",
+      "type": "Mare (Lunar plain)",
+      "latitude": 8.35,
+      "longitude": 30.83,
+      "diameter_km": 875.7
+    },
+    {
+      "name": "Mare Fecunditatis",
+      "type": "Mare (Lunar plain)",
+      "latitude": -7.84,
+      "longitude": 53.67,
+      "diameter_km": 840.4
+    },
+    {
+      "name": "Mare Nubium",
+      "type": "Mare (Lunar plain)",
+      "latitude": -20.59,
+      "longitude": -17.29,
+      "diameter_km": 714.5
+    }
+  ]
+}
