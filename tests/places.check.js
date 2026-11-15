@@ -8,6 +8,8 @@ const {
 	checkPlaceHover,
 	updatePlaceMarkersAnimation,
 	getHistoricLandingSites,
+	getLandmarkTypes,
+	getLandmarksByType,
 	placesData,
 	moonLandingSitesData
 } = await import('../src/lib/places.js');
@@ -116,6 +118,49 @@ for (const m of landingMarkersResult.markers) {
 }
 landingMarkersResult.dispose();
 console.log('✔ Landing site markers created and situated on Moon surface.');
+
+console.log('Testing Landmark Types Extraction & Filtering...');
+const landmarkTypes = getLandmarkTypes();
+assert(Array.isArray(landmarkTypes), 'getLandmarkTypes must return an array');
+assert(landmarkTypes.length >= 3, 'Must have at least Mare, Montes, Oceanus categories');
+
+const mareType = landmarkTypes.find((t) => t.value === 'Mare (Lunar plain)');
+assert(mareType, 'Must include Mare (Lunar plain)');
+assert.strictEqual(mareType.count, 6, 'Mare category must have 6 items');
+
+const montesType = landmarkTypes.find((t) => t.value === 'Montes (Mountain range)');
+assert(montesType, 'Must include Montes (Mountain range)');
+assert.strictEqual(montesType.count, 1, 'Montes category must have 1 item');
+
+const oceanusType = landmarkTypes.find((t) => t.value === 'Oceanus (Lunar plain)');
+assert(oceanusType, 'Must include Oceanus (Lunar plain)');
+assert.strictEqual(oceanusType.count, 1, 'Oceanus category must have 1 item');
+
+const historicType = landmarkTypes.find((t) => t.value === 'Historic Landing Sites');
+assert(historicType, 'Must include Historic Landing Sites');
+assert.strictEqual(historicType.count, 9, 'Historic Landing Sites must have 9 missions');
+
+console.log('✔ Landmark types successfully extracted with correct counts.');
+
+console.log('Testing Landmark Listing By Type...');
+const maria = getLandmarksByType('Mare (Lunar plain)');
+assert.strictEqual(maria.length, 6, 'Must return 6 maria');
+assert(maria.some((m) => m.name === 'Mare Tranquillitatis'));
+
+const mountains = getLandmarksByType('Montes (Mountain range)');
+assert.strictEqual(mountains.length, 1, 'Must return 1 mountain range');
+assert.strictEqual(mountains[0].name, 'Montes Cordillera');
+
+const oceanus = getLandmarksByType('Oceanus (Lunar plain)');
+assert.strictEqual(oceanus.length, 1, 'Must return 1 oceanus');
+assert.strictEqual(oceanus[0].name, 'Oceanus Procellarum');
+
+const historicSites = getLandmarksByType('Historic Landing Sites');
+assert.strictEqual(historicSites.length, 9, 'Must return 9 historic landing sites');
+assert(historicSites.some((s) => s.name === 'Apollo 11'));
+assert(historicSites.some((s) => s.name === 'Chandrayaan-3 Vikram'));
+
+console.log('✔ Landmark listing by category verified.');
 
 console.log('Testing Resource Disposal...');
 dispose();

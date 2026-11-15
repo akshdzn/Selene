@@ -60,6 +60,33 @@
 	let lastScrubTime = typeof performance !== 'undefined' ? performance.now() * 0.001 : 0;
 	let baselineDatasetHour = 12;
 
+	let cameraRef = null;
+	let controlsRef = null;
+	let isAnimatingCamera = false;
+	let cameraAnimStartTime = 0;
+	const cameraAnimDuration = 1000;
+	const cameraStartQuat = new THREE.Quaternion();
+	const cameraTargetQuat = new THREE.Quaternion();
+	let cameraStartDist = 2.9;
+	let cameraTargetDist = 2.5;
+
+	export function flyTo(lat, lon) {
+		if (typeof lat !== 'number' || typeof lon !== 'number') return;
+		if (!cameraRef) return;
+
+		const targetNormal = latLonToVector3(lat, lon, 1.0).normalize();
+		const currentNormal = cameraRef.position.clone().normalize();
+
+		cameraStartQuat.setFromUnitVectors(new THREE.Vector3(0, 0, 1), currentNormal);
+		cameraTargetQuat.setFromUnitVectors(new THREE.Vector3(0, 0, 1), targetNormal);
+
+		cameraStartDist = cameraRef.position.length();
+		cameraTargetDist = Math.max(1.8, Math.min(cameraStartDist, 2.5));
+
+		cameraAnimStartTime = typeof performance !== 'undefined' ? performance.now() : Date.now();
+		isAnimatingCamera = true;
+	}
+
 	$effect(() => {
 		const targetLat = selectedCoords?.lat ?? lunarPositions?.dataset?.coordinates?.latitude;
 		const targetLon = selectedCoords?.lon ?? lunarPositions?.dataset?.coordinates?.longitude;
@@ -68,6 +95,9 @@
 			selectedCursorRef.position.copy(normal).multiplyScalar(1.003);
 			selectedCursorRef.quaternion.setFromUnitVectors(new THREE.Vector3(0, 0, 1), normal);
 			selectedCursorRef.visible = true;
+		}
+		if (selectedCoords?.flyTo && typeof targetLat === 'number' && typeof targetLon === 'number') {
+			flyTo(targetLat, targetLon);
 		}
 	});
 
@@ -539,6 +569,16 @@
 		controls.minDistance = 1.3;
 		controls.maxDistance = 7.0;
 		controls.rotateSpeed = 0.7;
+
+		cameraRef = camera;
+		controlsRef = controls;
+		if (selectedCoords?.flyTo) {
+			const initLat = selectedCoords.lat;
+			const initLon = selectedCoords.lon;
+			if (typeof initLat === 'number' && typeof initLon === 'number') {
+				flyTo(initLat, initLon);
+			}
+		}
 
 		const textureLoader = new THREE.TextureLoader();
 
@@ -1060,6 +1100,7 @@
 
 		let pointerDownPos = { x: 0, y: 0 };
 		function onPointerDown(e) {
+			isAnimatingCamera = false;
 			pointerDownPos = { x: e.clientX, y: e.clientY };
 		}
 
@@ -1078,7 +1119,7 @@
 			if (placeHit) {
 				e.preventDefault();
 				e.stopPropagation();
-				onCoordinateSelect?.({ lat: placeHit.latitude, lon: placeHit.longitude });
+				onCoordinateSelect?.({ lat: placeHit.latitude, lon: placeHit.longitude, flyTo: true });
 				return;
 			}
 
@@ -1105,7 +1146,7 @@
 			if (placeHit) {
 				e.preventDefault();
 				e.stopPropagation();
-				onCoordinateSelect?.({ lat: placeHit.latitude, lon: placeHit.longitude });
+				onCoordinateSelect?.({ lat: placeHit.latitude, lon: placeHit.longitude, flyTo: true });
 				return;
 			}
 
@@ -1143,7 +1184,28 @@
 
 		function animate(timestamp) {
 			animId = requestAnimationFrame(animate);
-			controls.update();
+
+			if (isAnimatingCamera && cameraRef && controlsRef) {
+				const now = typeof performance !== 'undefined' ? performance.now() : Date.now();
+				const elapsed = now - cameraAnimStartTime;
+				const rawT = Math.min(1, elapsed / cameraAnimDuration);
+				const t = 1 - Math.pow(1 - rawT, 3);
+
+				const curQuat = new THREE.Quaternion().copy(cameraStartQuat).slerp(cameraTargetQuat, t);
+				const curNormal = new THREE.Vector3(0, 0, 1).applyQuaternion(curQuat);
+				const curDist = THREE.MathUtils.lerp(cameraStartDist, cameraTargetDist, t);
+
+				cameraRef.position.copy(curNormal).multiplyScalar(curDist);
+				cameraRef.lookAt(0, 0, 0);
+				controlsRef.update();
+
+				if (rawT >= 1) {
+					isAnimatingCamera = false;
+				}
+			} else {
+				controls.update();
+			}
+
 			starSystem.update(camera);
 
 			// Calculate sun obstruction by the Moon (sphere of radius 1.0 at origin)
@@ -1269,6 +1331,9 @@
 
 		// Cleanup
 		return () => {
+			cameraRef = null;
+			controlsRef = null;
+			isAnimatingCamera = false;
 			cancelAnimationFrame(animId);
 			window.removeEventListener('resize', onResize);
 			container.removeEventListener('pointermove', onPointerMove);

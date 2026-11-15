@@ -371,4 +371,54 @@ export function getHistoricLandingSites(jsonData = moonLandingSitesData) {
 		});
 }
 
+/**
+ * Returns distinct types of lunar landmarks from Places.json, plus Historic Landing Sites.
+ *
+ * @param {Array} locations Array of place objects (defaults to placesData.locations)
+ * @param {boolean} includeLandingSites Whether to include historic landing sites category
+ * @returns {Array<{ value: string, label: string, count: number }>}
+ */
+export function getLandmarkTypes(locations = placesData.locations, includeLandingSites = true) {
+	const typeCounts = new Map();
+
+	for (const loc of locations) {
+		const type = loc.type;
+		if (type) {
+			typeCounts.set(type, (typeCounts.get(type) || 0) + 1);
+		}
+	}
+
+	const result = Array.from(typeCounts.entries()).map(([type, count]) => ({
+		value: type,
+		label: type,
+		count
+	}));
+
+	if (includeLandingSites) {
+		const landingSites = getHistoricLandingSites(moonLandingSitesData);
+		result.push({
+			value: 'Historic Landing Sites',
+			label: 'Historic Landing Sites',
+			count: landingSites.length
+		});
+	}
+
+	return result;
+}
+
+/**
+ * Returns landmarks matching a specified landmark type.
+ *
+ * @param {string} type Landmark type string
+ * @param {Array} locations Array of place objects
+ * @returns {Array} Matching landmark objects
+ */
+export function getLandmarksByType(type, locations = placesData.locations) {
+	if (!type) return [];
+	if (type === 'Historic Landing Sites' || type.toLowerCase().includes('landing site')) {
+		return getHistoricLandingSites(moonLandingSitesData);
+	}
+	return locations.filter((loc) => loc.type === type);
+}
+
 export { placesData, moonLandingSitesData };
