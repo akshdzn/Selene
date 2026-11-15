@@ -83,6 +83,24 @@ assert(markersWithTex.markers[0].markerGroup.scale.x > 1.0, 'Hovered marker grou
 markersWithTex.dispose();
 console.log('✔ Marker.svg textured markers verified.');
 
+console.log('Testing Orange Circle Place Markers...');
+const circleMarkersResult = createPlaceMarkers(placesData.locations, 1.0, 'circle');
+assert.strictEqual(circleMarkersResult.markers.length, 8);
+for (const m of circleMarkersResult.markers) {
+	assert(m.circleMesh instanceof THREE.Mesh, 'Must have circleMesh');
+	assert(m.circleMesh.geometry instanceof THREE.CircleGeometry, 'Must use CircleGeometry');
+	assert.strictEqual(m.circleMesh.material.color.getHex(), 0xff5500, 'Must be orange (#ff5500)');
+	assert.strictEqual(m.ringMesh.visible, false, 'Square ring must be hidden');
+}
+updatePlaceMarkersAnimation(circleMarkersResult.markers, 1.0, circleMarkersResult.markers[0]);
+assert.strictEqual(circleMarkersResult.markers[0].markerMesh.material.color.getHex(), 0xffea77, 'Hovered circle marker must highlight');
+assert(circleMarkersResult.markers[0].markerGroup.scale.x > 1.0, 'Hovered circle marker must scale up');
+
+updatePlaceMarkersAnimation(circleMarkersResult.markers, 1.0, null);
+assert.strictEqual(circleMarkersResult.markers[0].markerMesh.material.color.getHex(), 0xff5500, 'Unhovered circle marker must revert to orange');
+circleMarkersResult.dispose();
+console.log('✔ Orange circle place markers verified.');
+
 console.log('Testing Historic Landing Sites Filter (Apollo and Chandrayaan only)...');
 const landingSites = getHistoricLandingSites(moonLandingSitesData);
 assert(landingSites && landingSites.length === 9, `Must extract exactly 9 landing sites, got ${landingSites?.length}`);

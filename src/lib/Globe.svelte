@@ -8,7 +8,6 @@
 	import moonDisplacementUrl from '../assets/moon_displacement.tif';
 	import earthUrl from '../assets/earth.jpg';
 	import earthNightUrl from '../assets/earth_night.jpg';
-	import markerSvgUrl from '../assets/Marker.svg';
 	import placesData from './Places.json' with { type: 'json' };
 	import landingSitesData from './moon_landing_sites.json' with { type: 'json' };
 	import {
@@ -1062,25 +1061,23 @@
 			selectedCursor.visible = true;
 		}
 
-		// 10. Markers for Places.json using Marker.svg
-		const markerTexture = textureLoader.load(markerSvgUrl);
-		markerTexture.colorSpace = THREE.SRGBColorSpace;
+		// 10. Markers for Places.json using orange circles
 		const {
 			containerGroup: placesGroup,
 			markers: placeMarkers,
 			hitMeshes: placeHitMeshes,
 			dispose: disposePlaces
-		} = createPlaceMarkers(placesData.locations, 1.0, markerTexture);
+		} = createPlaceMarkers(placesData.locations, 1.0, 'circle');
 		scene.add(placesGroup);
 
-		// 11. Markers for Moon Landing Sites (Apollo and Chandrayaan only)
+		// 11. Markers for Moon Landing Sites (Apollo and Chandrayaan only) using orange circles
 		const historicLandingSites = getHistoricLandingSites(landingSitesData);
 		const {
 			containerGroup: landingSitesGroup,
 			markers: landingMarkers,
 			hitMeshes: landingHitMeshes,
 			dispose: disposeLandingSites
-		} = createPlaceMarkers(historicLandingSites, 1.0, markerTexture);
+		} = createPlaceMarkers(historicLandingSites, 1.0, 'circle');
 		scene.add(landingSitesGroup);
 
 		const allPlaceMarkers = [...placeMarkers, ...landingMarkers];
@@ -1360,7 +1357,6 @@
 			disposePlaces();
 			scene.remove(landingSitesGroup);
 			disposeLandingSites();
-			markerTexture.dispose();
 			controls.dispose();
 			renderer.dispose();
 			cursorGeo.dispose();

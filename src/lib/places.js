@@ -107,9 +107,15 @@ export function createShinyRingMaterial(color = 0x00e5ff, emissive = 0x0088cc) {
  * @param {THREE.Texture|null} markerTexture Three.js texture of Marker.svg
  * @returns {object} { containerGroup, markers, hitMeshes, dispose }
  */
-export function createPlaceMarkers(locations = placesData.locations, moonRadius = 1.0, markerTexture = null) {
+export function createPlaceMarkers(locations = placesData.locations, moonRadius = 1.0, markerTexture = null, options = {}) {
 	const containerGroup = new THREE.Group();
 	containerGroup.name = 'lunar-places-markers';
+
+	const isCircle = markerTexture === 'circle' || options?.shape === 'circle';
+	const hasTexture = markerTexture && markerTexture !== 'circle';
+
+	const circleRadius = 0.016;
+	const circleGeo = new THREE.CircleGeometry(circleRadius, 32);
 
 	const markerAspect = 152 / 144;
 	const markerHeight = 0.052;
@@ -132,9 +138,25 @@ export function createPlaceMarkers(locations = placesData.locations, moonRadius 
 		const markerGroup = new THREE.Group();
 		markerGroup.name = `place-marker-${loc.name.replace(/[^a-zA-Z0-9]/g, '-').toLowerCase()}`;
 
-		// 1. Primary Marker.svg Mesh (active if markerTexture provided)
 		let markerMesh = null;
-		if (markerTexture) {
+
+		// 1. Orange Circle Marker (active when isCircle is true)
+		if (isCircle) {
+			const circleMat = new THREE.MeshBasicMaterial({
+				color: 0xff5500,
+				side: THREE.DoubleSide,
+				transparent: true,
+				opacity: 0.92,
+				depthWrite: false
+			});
+			const circleMesh = new THREE.Mesh(circleGeo, circleMat);
+			circleMesh.renderOrder = 2;
+			markerGroup.add(circleMesh);
+			markerMesh = circleMesh;
+		}
+
+		// 2. Primary Marker.svg Mesh (active if markerTexture provided and not circle)
+		if (hasTexture) {
 			const markerMat = new THREE.MeshBasicMaterial({
 				map: markerTexture,
 				color: 0xffffff,
@@ -148,10 +170,10 @@ export function createPlaceMarkers(locations = placesData.locations, moonRadius 
 			markerGroup.add(markerMesh);
 		}
 
-		// 2. Procedural Fallback Mesh & Reticle Brackets (visible when markerTexture is null, e.g. Node tests)
+		// 3. Procedural Fallback Mesh & Reticle Brackets (visible only when not circle and no texture)
 		const ringMat = createShinyRingMaterial(0x33e5ff, 0x0077aa);
 		const ringMesh = new THREE.Mesh(ringGeo, ringMat);
-		ringMesh.visible = !markerTexture;
+		ringMesh.visible = !isCircle && !hasTexture;
 		markerGroup.add(ringMesh);
 
 		const bracketsMat = new THREE.MeshStandardMaterial({
@@ -166,14 +188,14 @@ export function createPlaceMarkers(locations = placesData.locations, moonRadius 
 			depthWrite: false
 		});
 		const bracketsMesh = new THREE.Mesh(bracketsGeo, bracketsMat);
-		bracketsMesh.visible = !markerTexture;
+		bracketsMesh.visible = !isCircle && !hasTexture;
 		markerGroup.add(bracketsMesh);
 
-		// 3. Invisible Hit Target for Responsive Raycasting
+		// 4. Invisible Hit Target for Responsive Raycasting
 		const hitMesh = new THREE.Mesh(hitGeo, hitMat);
 		markerGroup.add(hitMesh);
 
-		// 4. Position on lunar surface & orient tangent to surface normal
+		// 5. Position on lunar surface & orient tangent to surface normal
 		const lat = loc.latitude ?? loc.lat;
 		const lon = loc.longitude ?? loc.lon;
 		const surfacePos = latLonToVector3(lat, lon, moonRadius + 0.004);
@@ -196,6 +218,8 @@ export function createPlaceMarkers(locations = placesData.locations, moonRadius 
 			coordsStr: coordsFormat.full,
 			markerGroup,
 			markerMesh,
+			circleMesh: isCircle ? markerMesh : null,
+			isCircle,
 			ringMesh,
 			bracketsMesh,
 			normal,
@@ -215,6 +239,7 @@ export function createPlaceMarkers(locations = placesData.locations, moonRadius 
 		markers,
 		hitMeshes,
 		dispose: () => {
+			circleGeo.dispose();
 			markerGeo.dispose();
 			ringGeo.dispose();
 			bracketsGeo.dispose();
@@ -293,9 +318,13 @@ export function updatePlaceMarkersAnimation(markers, time, hoveredPlace) {
 			const hoverScale = 1.25 + 0.04 * Math.sin(time * 6.0);
 			m.markerGroup.scale.set(hoverScale, hoverScale, hoverScale);
 		} else {
-			// Idle State: Authentic Marker.svg color and resting scale
+			// Idle State: Authentic color and resting scale
 			if (m.markerMesh) {
-				m.markerMesh.material.color.setHex(0xffffff);
+				if (m.isCircle) {
+					m.markerMesh.material.color.setHex(0xff5500);
+				} else {
+					m.markerMesh.material.color.setHex(0xffffff);
+				}
 				m.markerMesh.material.opacity = 0.92;
 			}
 			const latVal = m.latitude ?? m.lat ?? 0;
