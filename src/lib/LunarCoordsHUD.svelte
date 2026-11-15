@@ -9,7 +9,7 @@
     lon = 3.6339
   } = $props();
 
-  let isPopupOpen = $state(false);
+  let isDropdownOpen = $state(false);
 
   // 1. When a coordinate is selected, the above coordinates should ONLY display that coordinate (using selectedCoords).
   // 2. When no coordinate is selected yet, read latitude and longitude from the mouse cursor location (hoveredCoords).
@@ -24,9 +24,23 @@
     return convertToDirectionalCoords(lat ?? 26.1322, lon ?? 3.6339, { precision: 3, space: ' ' });
   });
 
+  let isTargetLocked = $derived(
+    Boolean(selectedCoords && typeof selectedCoords.lat === 'number' && typeof selectedCoords.lon === 'number')
+  );
+
+  let isHoverTracking = $derived(
+    Boolean(!isTargetLocked && hoveredCoords && typeof hoveredCoords.lat === 'number' && typeof hoveredCoords.lon === 'number')
+  );
+
+  let targetingStatus = $derived.by(() => {
+    if (isTargetLocked) return 'SURFACE TARGET LOCKED';
+    if (isHoverTracking) return 'LIVE CURSOR TRACKING';
+    return 'DEFAULT TELEMETRY';
+  });
+
   function handleKeydown(e) {
-    if (e.key === 'Escape' && isPopupOpen) {
-      isPopupOpen = false;
+    if (e.key === 'Escape' && isDropdownOpen) {
+      isDropdownOpen = false;
     }
   }
 
@@ -65,11 +79,11 @@
     <button
       type="button"
       class="hud-arrow-btn"
-      class:is-open={isPopupOpen}
-      onclick={() => (isPopupOpen = !isPopupOpen)}
-      aria-label="Toggle lunar site details"
-      aria-expanded={isPopupOpen}
-      title="View lunar site details"
+      class:is-open={isDropdownOpen}
+      onclick={() => (isDropdownOpen = !isDropdownOpen)}
+      aria-label="Toggle lunar site telemetry dropdown"
+      aria-expanded={isDropdownOpen}
+      title={isDropdownOpen ? "Collapse site telemetry" : "View site telemetry"}
       data-node-id="49:6"
       data-name="Frame"
     >
@@ -91,37 +105,32 @@
     <!-- Longitudinal Label (node 47:4) -->
     <span class="hud-label hud-label-lon" data-node-id="47:4">LONGITUDINAL</span>
   </div>
-</div>
 
-<!-- Popup Modal (identical styling and UX to info.svelte in landing.svelte) -->
-{#if isPopupOpen}
-  <div
-    class="info-popup-backdrop"
-    role="button"
-    tabindex="0"
-    onclick={() => (isPopupOpen = false)}
-    onkeydown={(e) => {
-      if (e.key === 'Enter' || e.key === ' ') isPopupOpen = false;
-    }}
-  >
+  <!-- Telemetry Dropdown Menu -->
+  {#if isDropdownOpen}
     <div
-      class="info-popup-card"
-      role="dialog"
-      aria-modal="true"
-      tabindex="-1"
-      onclick={(e) => e.stopPropagation()}
-      onkeydown={(e) => e.stopPropagation()}
+      class="telemetry-dropdown"
+      role="region"
+      aria-label="Lunar site telemetry dropdown"
     >
-      <div class="info-popup-header">
-        <h2 class="popup-title">LUNAR SITE TELEMETRY</h2>
-        <button class="info-close-btn" onclick={() => (isPopupOpen = false)}>
+      <div class="dropdown-header">
+        <div class="title-group">
+          <span class="telemetry-status-dot" class:is-locked={isTargetLocked}></span>
+          <h2 class="dropdown-title">LUNAR SITE TELEMETRY</h2>
+        </div>
+        <button
+          type="button"
+          class="dropdown-close-btn"
+          onclick={() => (isDropdownOpen = false)}
+          aria-label="Close telemetry dropdown"
+        >
           [ CLOSE ]
         </button>
       </div>
 
-      <div class="divider"></div>
+      <div class="dropdown-divider"></div>
 
-      <div class="info-popup-body">
+      <div class="dropdown-body">
         <div class="site-coords-grid">
           <div class="coord-stat-card">
             <span class="stat-label">LATITUDE</span>
@@ -133,6 +142,11 @@
           </div>
         </div>
 
+        <div class="telemetry-status-strip">
+          <span class="status-tag">STATUS:</span>
+          <span class="status-text">{targetingStatus}</span>
+        </div>
+
         <div class="placeholder-section">
           <div class="placeholder-badge">[ SITE ANALYSIS PENDING ]</div>
           <p class="placeholder-desc">
@@ -141,8 +155,8 @@
         </div>
       </div>
     </div>
-  </div>
-{/if}
+  {/if}
+</div>
 
 <style>
   /* ---------------- HUD Layout ---------------- */
@@ -256,7 +270,7 @@
     display: flex;
     align-items: center;
     justify-content: center;
-    transition: transform 0.2s cubic-bezier(0.16, 1, 0.3, 1), opacity 0.2s ease, color 0.2s ease;
+    transition: transform 0.22s cubic-bezier(0.16, 1, 0.3, 1), opacity 0.2s ease, color 0.2s ease;
   }
 
   .hud-arrow-btn:hover {
@@ -284,185 +298,238 @@
     pointer-events: none;
   }
 
-  /* ---------------- Popup Modal ---------------- */
-  /* Exact styling matching info popup in landing.svelte */
-  .info-popup-backdrop {
-    position: fixed;
-    inset: 0;
-    background: rgba(0, 0, 0, 0.65);
-    backdrop-filter: blur(4px);
-    -webkit-backdrop-filter: blur(4px);
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    z-index: 100;
-    animation: fadeIn 0.15s ease-out;
-  }
-
-  .info-popup-card {
-    position: relative;
-    width: 90vw;
-    max-width: 500px;
-    max-height: 82vh;
-    padding: 24px 28px;
-    background: rgba(10, 10, 16, 0.88);
-    color: #ffffff;
-    font-family: "Jersey 25", sans-serif;
-    letter-spacing: 1px;
-    backdrop-filter: blur(14px);
-    -webkit-backdrop-filter: blur(14px);
-    box-shadow: 0 0 30px rgba(0, 0, 0, 0.8), 0 0 20px rgba(255, 255, 255, 0.12);
+  /* ---------------- Dropdown Menu ---------------- */
+  /* Translucent frosted glass HUD dropdown attached below the coordinates HUD */
+  .telemetry-dropdown {
+    width: 423px;
+    box-sizing: border-box;
+    margin-top: 10px;
+    padding: 16px 20px 20px 20px;
+    /* Translucent dark glass backdrop allowing lunar surface and stars behind to remain clearly visible */
+    background: linear-gradient(
+      180deg,
+      rgba(10, 14, 24, 0.62) 0%,
+      rgba(6, 9, 18, 0.52) 100%
+    );
+    /* Frosted glass blur & saturation to smooth high-frequency background noise and ensure readability */
+    backdrop-filter: blur(16px) saturate(160%) brightness(1.05);
+    -webkit-backdrop-filter: blur(16px) saturate(160%) brightness(1.05);
+    border: 1px solid rgba(255, 255, 255, 0.16);
+    border-top: 1px solid rgba(255, 255, 255, 0.28);
+    border-radius: 4px;
+    box-shadow:
+      0 16px 36px rgba(0, 0, 0, 0.55),
+      0 0 24px rgba(0, 140, 255, 0.08),
+      inset 0 1px 0 rgba(255, 255, 255, 0.18);
     display: flex;
     flex-direction: column;
-    gap: 16px;
+    gap: 14px;
+    max-height: calc(100vh - 120px);
     overflow-y: auto;
-    animation: scaleUp 0.18s ease-out;
-    z-index: 101;
+    animation: dropdownSlideDown 0.22s cubic-bezier(0.16, 1, 0.3, 1);
+    transform-origin: top center;
   }
 
-  .info-popup-card::-webkit-scrollbar {
-    width: 6px;
+  .telemetry-dropdown::-webkit-scrollbar {
+    width: 5px;
   }
 
-  .info-popup-card::-webkit-scrollbar-track {
+  .telemetry-dropdown::-webkit-scrollbar-track {
     background: rgba(255, 255, 255, 0.04);
-    border-radius: 3px;
   }
 
-  .info-popup-card::-webkit-scrollbar-thumb {
+  .telemetry-dropdown::-webkit-scrollbar-thumb {
     background: rgba(255, 255, 255, 0.25);
-    border-radius: 3px;
+    border-radius: 2px;
   }
 
-  .info-popup-card::-webkit-scrollbar-thumb:hover {
+  .telemetry-dropdown::-webkit-scrollbar-thumb:hover {
     background: rgba(255, 255, 255, 0.45);
   }
 
-  .info-popup-header {
+  .dropdown-header {
     display: flex;
     justify-content: space-between;
     align-items: center;
   }
 
-  .popup-title {
+  .title-group {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+
+  .telemetry-status-dot {
+    width: 7px;
+    height: 7px;
+    border-radius: 50%;
+    background: #58b5ff;
+    box-shadow: 0 0 8px #58b5ff;
+    display: inline-block;
+    animation: pulseDot 2s infinite ease-in-out;
+  }
+
+  .telemetry-status-dot.is-locked {
+    background: #4ade80;
+    box-shadow: 0 0 8px #4ade80;
+  }
+
+  .dropdown-title {
     margin: 0;
-    font-size: 24px;
+    font-family: "Jersey 25", sans-serif;
+    font-size: 21px;
     letter-spacing: 1.4px;
     color: #ffffff;
     line-height: 1.15;
-    text-shadow: 0 0 12px rgba(255, 255, 255, 0.2);
+    text-shadow: 0 1px 3px rgba(0, 0, 0, 0.95), 0 0 10px rgba(0, 0, 0, 0.8);
   }
 
-  .info-close-btn {
-    padding: 6px 18px;
+  .dropdown-close-btn {
+    padding: 4px 12px;
     background: rgba(255, 255, 255, 0.08);
     color: #ffffff;
-    border: 1px solid rgba(255, 255, 255, 0.45);
-    border-radius: 4px;
+    border: 1px solid rgba(255, 255, 255, 0.35);
+    border-radius: 3px;
     font-family: "Jersey 25", sans-serif;
-    font-size: 18px;
+    font-size: 15px;
     letter-spacing: 1px;
     cursor: pointer;
     backdrop-filter: blur(8px);
-    box-shadow: 0 0 10px rgba(255, 255, 255, 0.1);
-    transition: all 0.2s ease;
+    box-shadow: 0 0 10px rgba(255, 255, 255, 0.08);
+    transition: all 0.18s ease;
+    text-shadow: 0 1px 2px rgba(0, 0, 0, 0.9);
   }
 
-  .info-close-btn:hover {
-    background: rgba(255, 255, 255, 0.22);
+  .dropdown-close-btn:hover {
+    background: rgba(255, 255, 255, 0.2);
     border-color: #ffffff;
-    box-shadow: 0 0 16px rgba(255, 255, 255, 0.35);
-    transform: scale(1.04);
+    box-shadow: 0 0 14px rgba(255, 255, 255, 0.3);
+    transform: scale(1.03);
   }
 
-  .info-close-btn:active {
-    transform: scale(0.96);
+  .dropdown-close-btn:active {
+    transform: scale(0.97);
   }
 
-  .divider {
+  .dropdown-divider {
     height: 1px;
-    background: linear-gradient(90deg, rgba(255, 255, 255, 0.35) 0%, rgba(255, 255, 255, 0.05) 100%);
+    background: linear-gradient(
+      90deg,
+      rgba(255, 255, 255, 0.35) 0%,
+      rgba(255, 255, 255, 0.06) 100%
+    );
   }
 
-  .info-popup-body {
+  .dropdown-body {
     display: flex;
     flex-direction: column;
-    gap: 16px;
+    gap: 12px;
     user-select: text;
   }
 
   .site-coords-grid {
     display: grid;
     grid-template-columns: 1fr 1fr;
-    gap: 12px;
+    gap: 10px;
   }
 
   .coord-stat-card {
-    padding: 12px 14px;
-    background: rgba(255, 255, 255, 0.04);
+    padding: 10px 12px;
+    background: rgba(255, 255, 255, 0.06);
     display: flex;
     flex-direction: column;
-    gap: 4px;
-    border: 1px solid rgba(255, 255, 255, 0.08);
+    gap: 3px;
+    border: 1px solid rgba(255, 255, 255, 0.12);
+    box-shadow: inset 0 0 12px rgba(0, 0, 0, 0.25);
   }
 
   .stat-label {
     font-family: "Jersey 25", sans-serif;
-    font-size: 15px;
-    color: #ff9955;
+    font-size: 14px;
+    color: #ffaa55;
     letter-spacing: 1.1px;
+    text-shadow: 0 1px 3px rgba(0, 0, 0, 0.95);
   }
 
   .stat-value {
     font-family: "Space Grotesk", sans-serif;
-    font-size: 18px;
-    font-weight: 500;
+    font-size: 17px;
+    font-weight: 600;
     color: #ffffff;
     letter-spacing: 0.5px;
+    text-shadow: 0 1px 3px rgba(0, 0, 0, 0.95), 0 0 6px rgba(0, 0, 0, 0.7);
+  }
+
+  .telemetry-status-strip {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 6px 10px;
+    background: rgba(255, 255, 255, 0.04);
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    font-family: "Jersey 25", sans-serif;
+    letter-spacing: 1px;
+  }
+
+  .status-tag {
+    font-size: 13px;
+    color: rgba(255, 255, 255, 0.55);
+    text-shadow: 0 1px 2px rgba(0, 0, 0, 0.9);
+  }
+
+  .status-text {
+    font-size: 15px;
+    color: #79c0ff;
+    letter-spacing: 1.2px;
+    text-shadow: 0 1px 3px rgba(0, 0, 0, 0.95);
   }
 
   .placeholder-section {
-    padding: 16px;
-    background: rgba(255, 255, 255, 0.03);
-    border: 1px dashed rgba(255, 255, 255, 0.18);
+    padding: 12px 14px;
+    background: rgba(0, 0, 0, 0.25);
+    border: 1px dashed rgba(255, 255, 255, 0.2);
     display: flex;
     flex-direction: column;
-    gap: 8px;
+    gap: 6px;
   }
 
   .placeholder-badge {
     font-family: "Jersey 25", sans-serif;
-    font-size: 16px;
-    color: rgba(255, 255, 255, 0.6);
-    letter-spacing: 1px;
+    font-size: 15px;
+    color: #e2e8f0;
+    letter-spacing: 1.1px;
+    text-shadow: 0 1px 3px rgba(0, 0, 0, 0.95);
   }
 
   .placeholder-desc {
     margin: 0;
     font-family: "Space Grotesk", sans-serif;
-    font-size: 14px;
-    line-height: 1.4;
-    color: rgba(255, 255, 255, 0.7);
-    letter-spacing: 0.4px;
+    font-size: 13px;
+    line-height: 1.45;
+    color: rgba(255, 255, 255, 0.88);
+    letter-spacing: 0.3px;
+    text-shadow: 0 1px 3px rgba(0, 0, 0, 0.95);
   }
 
-  @keyframes fadeIn {
+  @keyframes dropdownSlideDown {
     from {
       opacity: 0;
+      transform: translateY(-8px) scaleY(0.97);
     }
     to {
       opacity: 1;
+      transform: translateY(0) scaleY(1);
     }
   }
 
-  @keyframes scaleUp {
-    from {
-      opacity: 0;
-      transform: scale(0.94);
-    }
-    to {
+  @keyframes pulseDot {
+    0%, 100% {
       opacity: 1;
       transform: scale(1);
+    }
+    50% {
+      opacity: 0.45;
+      transform: scale(0.85);
     }
   }
 </style>

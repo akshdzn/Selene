@@ -107,7 +107,7 @@
       />
     </div>
 
-    <!-- Lunar Coordinates HUD & Telemetry Popup (Figma node 49:9) -->
+    <!-- Lunar Coordinates HUD & Telemetry Dropdown (Figma node 49:9) -->
     <LunarCoordsHUD
       {selectedCoords}
       {hoveredCoords}
