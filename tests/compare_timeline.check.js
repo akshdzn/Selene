@@ -219,4 +219,60 @@ assert.strictEqual(getTrackTag(2, null, 'timelines'), 'SAMPLE 2', 'Timelines Sam
 
 console.log('✔ Sites sub-mode shared timeline and optimal sample checks verified.');
 
+console.log('Testing Interactive Sample Selection in Timelines Compare Mode...');
+
+let currentSlot = 1;
+let currentActivePositions = { id: 'sample1' };
+const s1Positions = { id: 'sample1', timeRange: { startDate: '2026-03-01', endDate: '2026-03-21' } };
+const s2Positions = { id: 'sample2', timeRange: { startDate: '2026-04-05', endDate: '2026-04-25' } };
+
+function handleSelectSampleSlot(slot, modeType) {
+  currentSlot = slot;
+  if (modeType === 'timelines') {
+    currentActivePositions = slot === 1 ? s1Positions : s2Positions;
+  }
+}
+
+function isSampleCardActive(slot, activeSlot) {
+  return slot === activeSlot;
+}
+
+function formatSampleDateRange(positions) {
+  if (!positions?.timeRange?.startDate || !positions?.timeRange?.endDate) return '';
+  const formatDate = (d) => {
+    const date = typeof d === 'string' ? new Date(d) : d;
+    if (isNaN(date?.getTime?.())) return typeof d === 'string' ? d.split('T')[0] : '';
+    const pad = (n) => String(n).padStart(2, '0');
+    return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}`;
+  };
+  const s = formatDate(positions.timeRange.startDate);
+  const e = formatDate(positions.timeRange.endDate);
+  return s && e ? `${s} — ${e}` : '';
+}
+
+// Initial state: Sample 1 active
+assert.strictEqual(isSampleCardActive(1, currentSlot), true, 'Sample 1 should be active initially');
+assert.strictEqual(isSampleCardActive(2, currentSlot), false, 'Sample 2 should not be active initially');
+assert.strictEqual(currentActivePositions.id, 'sample1', 'Sample 1 positions active');
+
+// Click Sample 2
+handleSelectSampleSlot(2, 'timelines');
+assert.strictEqual(currentSlot, 2, 'Selected slot should update to 2');
+assert.strictEqual(isSampleCardActive(2, currentSlot), true, 'Sample 2 should now be active');
+assert.strictEqual(isSampleCardActive(1, currentSlot), false, 'Sample 1 should no longer be active');
+assert.strictEqual(currentActivePositions.id, 'sample2', 'Sample 2 positions active');
+
+// Click back to Sample 1
+handleSelectSampleSlot(1, 'timelines');
+assert.strictEqual(currentSlot, 1, 'Selected slot should return to 1');
+assert.strictEqual(isSampleCardActive(1, currentSlot), true, 'Sample 1 should be active again');
+assert.strictEqual(currentActivePositions.id, 'sample1', 'Sample 1 positions active again');
+
+// Test date range formatting
+assert.strictEqual(formatSampleDateRange(s1Positions), '2026-03-01 — 2026-03-21', 'Sample 1 date range formatted');
+assert.strictEqual(formatSampleDateRange(s2Positions), '2026-04-05 — 2026-04-25', 'Sample 2 date range formatted');
+assert.strictEqual(formatSampleDateRange(null), '', 'Empty when positions is null');
+
+console.log('✔ Interactive sample selection in timelines compare mode verified.');
+
 console.log('✔ All compare mode duration and timeline checks passed successfully!');

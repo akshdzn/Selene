@@ -212,6 +212,8 @@
           fetchSitesCompareEphemeris(site1Coords, site2Coords, pendingStartDate, pendingEndDate);
         }
       }
+    } else if (mode === 'single') {
+      activeLunarPositions = lunarPositions;
     }
   });
 
@@ -314,12 +316,16 @@
 
   function handleSelectSiteSlot(slot) {
     activeSiteSlot = slot;
-    const targetSite = slot === 1 ? site1Coords : site2Coords;
-    if (targetSite) {
-      lat = targetSite.lat;
-      lon = targetSite.lon;
-      selectedCoords = { lat: targetSite.lat, lon: targetSite.lon, name: targetSite.name, flyTo: true, _ts: Date.now() };
+    if (compareType === 'timelines') {
       activeLunarPositions = slot === 1 ? lunarPositions : lunarPositionsS2;
+    } else {
+      const targetSite = slot === 1 ? site1Coords : site2Coords;
+      if (targetSite) {
+        lat = targetSite.lat;
+        lon = targetSite.lon;
+        selectedCoords = { lat: targetSite.lat, lon: targetSite.lon, name: targetSite.name, flyTo: true, _ts: Date.now() };
+        activeLunarPositions = slot === 1 ? lunarPositions : lunarPositionsS2;
+      }
     }
   }
 
@@ -436,8 +442,17 @@
       </div>
     {:else}
       <!-- TIMELINES COMPARE MODE: Sample 1 on Left, Sample 2 on Right -->
-      <div class="hud-date-picker start-picker compare-sample-card" class:is-optimal-card={optimalSample === 1}>
-        <div class="compare-card-header">
+      <div
+        class="hud-date-picker start-picker compare-sample-card"
+        class:is-optimal-card={optimalSample === 1}
+        class:is-active-slot={activeSiteSlot === 1}
+      >
+        <button
+          type="button"
+          class="compare-card-header"
+          onclick={() => handleSelectSiteSlot(1)}
+          aria-label="Target Sample 1"
+        >
           <div class="compare-tag-wrap">
             <span class="compare-tag s1-tag">SAMPLE 1</span>
             {#if optimalSample === 1}
@@ -445,7 +460,7 @@
             {/if}
           </div>
           <span class="compare-duration">{s1DurationDays} DAYS</span>
-        </div>
+        </button>
         <DatePicker
           label="START DATE"
           value={pendingStartDate}
@@ -466,8 +481,17 @@
         />
       </div>
 
-      <div class="hud-date-picker end-picker compare-sample-card" class:is-optimal-card={optimalSample === 2}>
-        <div class="compare-card-header align-right">
+      <div
+        class="hud-date-picker end-picker compare-sample-card"
+        class:is-optimal-card={optimalSample === 2}
+        class:is-active-slot={activeSiteSlot === 2}
+      >
+        <button
+          type="button"
+          class="compare-card-header align-right"
+          onclick={() => handleSelectSiteSlot(2)}
+          aria-label="Target Sample 2"
+        >
           <div class="compare-tag-wrap">
             {#if optimalSample === 2}
               <span class="optimal-sample-badge">OPTIMAL SAMPLE</span>
@@ -475,7 +499,7 @@
             <span class="compare-tag s2-tag">SAMPLE 2</span>
           </div>
           <span class="compare-duration">{s1DurationDays} DAYS</span>
-        </div>
+        </button>
         <DatePicker
           label="START DATE"
           value={pendingS2StartDate}
@@ -605,11 +629,15 @@
   }
 
   .compare-card-header {
+    all: unset;
+    cursor: pointer;
     display: flex;
     align-items: center;
     justify-content: space-between;
     padding-bottom: 8px;
     border-bottom: 1px solid rgba(255, 255, 255, 0.15);
+    width: 100%;
+    box-sizing: border-box;
   }
 
   .compare-card-header.align-right {
@@ -651,6 +679,22 @@
     box-shadow:
       0 12px 32px rgba(0, 0, 0, 0.6),
       0 0 16px rgba(74, 222, 128, 0.18),
+      inset 0 1px 0 rgba(255, 255, 255, 0.2);
+  }
+
+  .compare-sample-card.is-active-slot {
+    border-color: rgba(51, 229, 255, 0.6);
+    box-shadow:
+      0 12px 32px rgba(0, 0, 0, 0.6),
+      0 0 16px rgba(51, 229, 255, 0.22),
+      inset 0 1px 0 rgba(255, 255, 255, 0.2);
+  }
+
+  .compare-sample-card.is-optimal-card.is-active-slot {
+    border-color: rgba(74, 222, 128, 0.75);
+    box-shadow:
+      0 12px 32px rgba(0, 0, 0, 0.6),
+      0 0 20px rgba(74, 222, 128, 0.3),
       inset 0 1px 0 rgba(255, 255, 255, 0.2);
   }
 

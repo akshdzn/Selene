@@ -103,21 +103,6 @@
     return convertToDirectionalCoords(currentLatNum, currentLonNum, { precision: 3, space: ' ' });
   });
 
-  let activeSelectedLandmark = $derived.by(() => {
-    if (mode === 'compare' && compareType === 'sites') {
-      const activeCoords = activeSiteSlot === 1 ? site1Coords : site2Coords;
-      if (activeCoords?.name) {
-        return { name: activeCoords.name, lat: activeCoords.lat, lon: activeCoords.lon };
-      }
-      return findLandmarkByCoords(currentLatNum, currentLonNum);
-    }
-    if (selectedLandmark) return selectedLandmark;
-    if (selectedCoords?.name) {
-      return { name: selectedCoords.name, lat: selectedCoords.lat, lon: selectedCoords.lon };
-    }
-    return findLandmarkByCoords(currentLatNum, currentLonNum);
-  });
-
   async function startEditing(targetField = 'lat') {
     isEditing = true;
     hasInputError = false;
@@ -221,7 +206,6 @@
   }
 
   function isLandmarkActive(landmark) {
-    if (activeSelectedLandmark?.name && activeSelectedLandmark.name === landmark.name) return true;
     if (selectedLandmark?.name && selectedLandmark.name === landmark.name) return true;
     const targetLat = landmark.latitude ?? landmark.lat;
     const targetLon = landmark.longitude ?? landmark.lon;
@@ -229,28 +213,6 @@
     return (
       Math.abs(currentLatNum - targetLat) < 0.05 &&
       Math.abs(currentLonNum - targetLon) < 0.05
-    );
-  }
-
-  function isLandmarkSite1(landmark) {
-    if (site1Coords?.name && site1Coords.name === landmark.name) return true;
-    const targetLat = landmark.latitude ?? landmark.lat;
-    const targetLon = landmark.longitude ?? landmark.lon;
-    if (!site1Coords || typeof targetLat !== 'number' || typeof targetLon !== 'number') return false;
-    return (
-      Math.abs(site1Coords.lat - targetLat) < 0.05 &&
-      Math.abs(site1Coords.lon - targetLon) < 0.05
-    );
-  }
-
-  function isLandmarkSite2(landmark) {
-    if (site2Coords?.name && site2Coords.name === landmark.name) return true;
-    const targetLat = landmark.latitude ?? landmark.lat;
-    const targetLon = landmark.longitude ?? landmark.lon;
-    if (!site2Coords || typeof targetLat !== 'number' || typeof targetLon !== 'number') return false;
-    return (
-      Math.abs(site2Coords.lat - targetLat) < 0.05 &&
-      Math.abs(site2Coords.lon - targetLon) < 0.05
     );
   }
 
@@ -304,11 +266,26 @@
     onCompareTypeChange?.(type);
   }
 
+  function formatSampleDateRange(positions) {
+    if (!positions?.timeRange?.startDate || !positions?.timeRange?.endDate) return '';
+    const formatDate = (d) => {
+      const date = typeof d === 'string' ? new Date(d) : d;
+      if (isNaN(date?.getTime?.())) return typeof d === 'string' ? d.split('T')[0] : '';
+      const pad = (n) => String(n).padStart(2, '0');
+      return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}`;
+    };
+    const s = formatDate(positions.timeRange.startDate);
+    const e = formatDate(positions.timeRange.endDate);
+    return s && e ? `${s} — ${e}` : '';
+  }
+
   function handleSelectSlot(slot) {
     activeSiteSlot = slot;
-    const targetCoords = slot === 1 ? site1Coords : site2Coords;
-    if (targetCoords) {
-      selectedLandmark = targetCoords.name ? { name: targetCoords.name, lat: targetCoords.lat, lon: targetCoords.lon } : null;
+    if (compareType === 'sites') {
+      const targetCoords = slot === 1 ? site1Coords : site2Coords;
+      if (targetCoords) {
+        selectedLandmark = targetCoords.name ? { name: targetCoords.name, lat: targetCoords.lat, lon: targetCoords.lon } : null;
+      }
     }
     onSiteSlotSelect?.(slot);
   }
@@ -439,15 +416,7 @@
   <div class="lunar-hud-labels">
     <!-- Latitude Label (node 47:3) -->
     <span class="hud-label hud-label-lat" data-node-id="47:3">
-      {#if isEditing}
-        LAT (-90°..90°)
-      {:else if mode === 'compare' && compareType === 'sites'}
-        SITE {activeSiteSlot} ({activeSiteSlot === 1 ? (site1Name || 'SITE 1') : (site2Name || 'SITE 2')}) · LAT
-      {:else if activeSelectedLandmark?.name}
-        {activeSelectedLandmark.name.toUpperCase()} · LAT
-      {:else}
-        LATITUDE
-      {/if}
+      {isEditing ? 'LAT (-90°..90°)' : 'LATITUDE'}
     </span>
 
     <!-- Arrow Button (node 49:6) -->
@@ -479,15 +448,7 @@
 
     <!-- Longitudinal Label (node 47:4) -->
     <span class="hud-label hud-label-lon" data-node-id="47:4">
-      {#if isEditing}
-        LON (-180°..180°)
-      {:else if mode === 'compare' && compareType === 'sites'}
-        SITE {activeSiteSlot} ({activeSiteSlot === 1 ? (site1Name || 'SITE 1') : (site2Name || 'SITE 2')}) · LON
-      {:else if activeSelectedLandmark?.name}
-        {activeSelectedLandmark.name.toUpperCase()} · LON
-      {:else}
-        LONGITUDINAL
-      {/if}
+      {isEditing ? 'LON (-180°..180°)' : 'LONGITUDINAL'}
     </span>
   </div>
 
@@ -508,355 +469,358 @@
           </Tabs.Trigger>
         </Tabs.List>
 
-        <!-- Duplicated Buttons Below When Compare is Selected: Sites and Timelines -->
-        {#if mode === 'compare'}
-          <div class="tabs-list sub-tabs-list" role="tablist" aria-label="Compare sub modes">
-            <button
-              type="button"
-              class="tab-trigger sub-tab-trigger"
-              class:is-active={compareType === 'sites'}
-              data-state={compareType === 'sites' ? 'active' : 'inactive'}
-              onclick={() => handleSubTabChange('sites')}
-            >
-              Sites
-            </button>
-            <button
-              type="button"
-              class="tab-trigger sub-tab-trigger"
-              class:is-active={compareType === 'timelines'}
-              data-state={compareType === 'timelines' ? 'active' : 'inactive'}
-              onclick={() => handleSubTabChange('timelines')}
-            >
-              Timelines
-            </button>
-          </div>
-        {/if}
-
         <!-- Single Tab Content -->
         <Tabs.Content value="single" class="tab-content">
-          <div class="single-site-section">
-            <div class="selected-site-card">
-              <div class="site-slot-header">
-                <div class="site-slot-tag-wrap">
-                  <span class="slot-active-dot is-active"></span>
-                  <span class="summary-sample-tag s1-tag">SELECTED SITE</span>
+          {#if mode === 'single'}
+            <div class="combobox-section">
+              <span class="combobox-label">LANDMARK CATEGORY</span>
+              <Combobox.Root
+                type="single"
+                bind:value={selectedType}
+                bind:inputValue={typeInputValue}
+                items={landmarkTypes}
+                onValueChange={(val) => {
+                  selectedType = val ?? '';
+                }}
+              >
+                <div class="combobox-input-row">
+                  <Combobox.Input
+                    class="combobox-search-input"
+                    placeholder="Select landmark type..."
+                    aria-label="Select landmark type"
+                  />
+                  {#if selectedType}
+                    <button
+                      type="button"
+                      class="combobox-action-btn combobox-clear-btn"
+                      onclick={(e) => {
+                        e.stopPropagation();
+                        selectedType = '';
+                        typeInputValue = '';
+                      }}
+                      title="Clear selection"
+                      aria-label="Clear selection"
+                    >
+                      ✕
+                    </button>
+                  {/if}
+                  <Combobox.Trigger
+                    class="combobox-action-btn combobox-trigger-btn"
+                    aria-label="Toggle landmark types dropdown"
+                  >
+                    <svg
+                      class="combobox-chevron"
+                      width="14"
+                      height="14"
+                      viewBox="0 0 24 24"
+                      fill="none"
+                      stroke="currentColor"
+                      stroke-width="2.2"
+                    >
+                      <polyline points="6 9 12 15 18 9"></polyline>
+                    </svg>
+                  </Combobox.Trigger>
                 </div>
-                <span class="slot-targeting-badge">ACTIVE</span>
-              </div>
-              <div class="site-slot-details">
-                <span class="site-slot-name">{activeSelectedLandmark?.name || site1Name || 'Apollo 15'}</span>
-                <span class="site-slot-coords">{formatSiteCoords({ lat: currentLatNum, lon: currentLonNum })}</span>
-              </div>
+
+                <Combobox.Portal>
+                  <Combobox.Content
+                    class="combobox-content-portal"
+                    side="bottom"
+                    sideOffset={6}
+                    align="start"
+                  >
+                    <Combobox.Viewport class="combobox-viewport">
+                      {#each filteredTypeOptions as opt (opt.value)}
+                        <Combobox.Item
+                          value={opt.value}
+                          label={opt.label}
+                          class="combobox-item-option"
+                        >
+                          <span class="option-label">{opt.label}</span>
+                          <span class="option-badge">[{opt.count}]</span>
+                        </Combobox.Item>
+                      {/each}
+                      {#if filteredTypeOptions.length === 0}
+                        <div class="combobox-empty-row">No matching types found</div>
+                      {/if}
+                    </Combobox.Viewport>
+                  </Combobox.Content>
+                </Combobox.Portal>
+              </Combobox.Root>
             </div>
 
-            {@render landmarkBrowser(false)}
-          </div>
+            <!-- Landmarks Listed Below Combobox When A Type Is Selected -->
+            {#if selectedType}
+              <div class="landmarks-list-section">
+                <div class="landmarks-list-header">
+                  <span class="section-title">{selectedType}</span>
+                  <span class="section-count">
+                    {listedLandmarks.length} {listedLandmarks.length === 1 ? 'LOCATION' : 'LOCATIONS'}
+                  </span>
+                </div>
+
+                <div class="landmarks-scroll-container">
+                  {#each listedLandmarks as landmark (landmark.name)}
+                    {@const isActive = isLandmarkActive(landmark)}
+                    <button
+                      type="button"
+                      class="landmark-item-row"
+                      class:is-active={isActive}
+                      onclick={() => handleSelectLandmark(landmark)}
+                      title="Click to navigate to {landmark.name} on the Moon"
+                      aria-label="Select landmark {landmark.name}"
+                    >
+                      <div class="landmark-left-col">
+                        <span class="landmark-dot" class:is-active={isActive}></span>
+                        <div class="landmark-text-block">
+                          <span class="landmark-name-text">{landmark.name}</span>
+                          <span class="landmark-coords-text">
+                            {formatLandmarkCoords(landmark)}
+                          </span>
+                        </div>
+                      </div>
+
+                      <div class="landmark-right-col">
+                        {#if landmark.diameter_km}
+                          <span class="landmark-metric-badge">Ø {Math.round(landmark.diameter_km)} km</span>
+                        {:else if landmark.country}
+                          <span class="landmark-metric-badge">{landmark.country}</span>
+                        {/if}
+                        {#if isActive}
+                          <span class="landmark-locked-tag">TARGETED</span>
+                        {/if}
+                      </div>
+                    </button>
+                  {/each}
+                </div>
+              </div>
+            {:else}
+              <div class="landmarks-empty-state">
+                <div class="empty-state-icon">
+                  <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">
+                    <circle cx="12" cy="12" r="10"></circle>
+                    <circle cx="12" cy="12" r="3"></circle>
+                    <line x1="12" y1="2" x2="12" y2="5"></line>
+                    <line x1="12" y1="19" x2="12" y2="22"></line>
+                    <line x1="2" y1="12" x2="5" y2="12"></line>
+                    <line x1="19" y1="12" x2="22" y2="12"></line>
+                  </svg>
+                </div>
+                <span class="empty-state-title">SELECT A LANDMARK TYPE</span>
+                <p class="empty-state-desc">
+                  Choose a landmark category from the combobox above to browse Maria, mountain ranges, and historical landing sites.
+                </p>
+              </div>
+            {/if}
+          {/if}
         </Tabs.Content>
 
         <!-- Compare Tab Content -->
         <Tabs.Content value="compare" class="tab-content">
-          {#if compareType === 'timelines'}
-            <!-- Timelines Compare Mode -->
-            <div class="compare-hud-section">
-              <div class="compare-hud-header">
-                <span class="compare-hud-title">MISSION WINDOW COMPARISON</span>
-                <span class="compare-hud-badge">TIMELINES</span>
-              </div>
-
-              <div class="compare-samples-grid">
-                <!-- Sample 1 Card -->
-                <div class="compare-sample-summary-card" class:is-optimal={activeOptimalSample === 1}>
-                  <div class="summary-card-header">
-                    <span class="summary-sample-tag s1-tag">SAMPLE 1</span>
-                    {#if activeOptimalSample === 1}
-                      <span class="optimal-sample-badge">OPTIMAL SAMPLE</span>
-                    {/if}
-                  </div>
-                  <div class="summary-metric-row">
-                    <span class="metric-name">OPTIMAL WINDOW</span>
-                    <span class="metric-value">{sample1OptimalValue}h</span>
-                  </div>
-                </div>
-
-                <!-- Sample 2 Card -->
-                <div class="compare-sample-summary-card" class:is-optimal={activeOptimalSample === 2}>
-                  <div class="summary-card-header">
-                    <span class="summary-sample-tag s2-tag">SAMPLE 2</span>
-                    {#if activeOptimalSample === 2}
-                      <span class="optimal-sample-badge">OPTIMAL SAMPLE</span>
-                    {/if}
-                  </div>
-                  <div class="summary-metric-row">
-                    <span class="metric-name">OPTIMAL WINDOW</span>
-                    <span class="metric-value">{sample2OptimalValue}h</span>
-                  </div>
-                </div>
-              </div>
-
-              {#if activeOptimalSample}
-                <div class="optimal-verdict-banner">
-                  <span class="verdict-icon">★</span>
-                  <span class="verdict-text">
-                    SAMPLE {activeOptimalSample} IS OPTIMAL WITH {optimalSampleValue}h OF SIMULTANEOUS POWER & COMMS
-                  </span>
-                </div>
-              {:else}
-                <div class="compare-pending-notice">
-                  <span>Select and calculate date ranges to evaluate optimal sample window.</span>
-                </div>
-              {/if}
+          {#if mode === 'compare'}
+            <div class="tabs-list sub-tabs-list" role="tablist" aria-label="Compare sub modes">
+              <button
+                type="button"
+                class="tab-trigger sub-tab-trigger"
+                class:is-active={compareType === 'sites'}
+                data-state={compareType === 'sites' ? 'active' : 'inactive'}
+                onclick={() => handleSubTabChange('sites')}
+              >
+                Sites
+              </button>
+              <button
+                type="button"
+                class="tab-trigger sub-tab-trigger"
+                class:is-active={compareType === 'timelines'}
+                data-state={compareType === 'timelines' ? 'active' : 'inactive'}
+                onclick={() => handleSubTabChange('timelines')}
+              >
+                Timelines
+              </button>
             </div>
-          {:else}
-            <!-- Sites Compare Mode: Same UI as Single Option but two sites can be selected and compared -->
-            <div class="compare-sites-section">
-              <div class="compare-hud-header">
-                <span class="compare-hud-title">LUNAR SITE COMPARISON</span>
-                <span class="compare-hud-badge">SITES</span>
-              </div>
 
-              <!-- Two Sites Selection Slot Cards -->
-              <div class="sites-slot-selector">
-                <button
-                  type="button"
-                  class="site-slot-card"
-                  class:is-active-slot={activeSiteSlot === 1}
-                  class:is-optimal={activeOptimalSample === 1}
-                  onclick={() => handleSelectSlot(1)}
-                  aria-label="Select Site 1 slot to target"
-                >
-                  <div class="site-slot-header">
-                    <div class="site-slot-tag-wrap">
-                      <span class="slot-active-dot" class:is-active={activeSiteSlot === 1}></span>
-                      <span class="summary-sample-tag s1-tag">SITE 1</span>
-                      {#if activeOptimalSample === 1}
-                        <span class="optimal-sample-badge">OPTIMAL SAMPLE</span>
+            {#if compareType === 'timelines'}
+              <!-- Timelines Compare Mode -->
+              <div class="compare-hud-section">
+                <div class="compare-hud-header">
+                  <span class="compare-hud-title">MISSION WINDOW COMPARISON</span>
+                  <span class="compare-hud-badge">TIMELINES</span>
+                </div>
+
+                <div class="compare-samples-grid">
+                  <!-- Sample 1 Card -->
+                  <button
+                    type="button"
+                    class="compare-sample-summary-card"
+                    class:is-active-slot={activeSiteSlot === 1}
+                    class:is-optimal={activeOptimalSample === 1}
+                    onclick={() => handleSelectSlot(1)}
+                    aria-label="Select Sample 1 to target"
+                  >
+                    <div class="summary-card-header">
+                      <div class="site-slot-tag-wrap">
+                        <span class="slot-active-dot" class:is-active={activeSiteSlot === 1}></span>
+                        <span class="summary-sample-tag s1-tag">SAMPLE 1</span>
+                        {#if activeOptimalSample === 1}
+                          <span class="optimal-sample-badge">OPTIMAL SAMPLE</span>
+                        {/if}
+                      </div>
+                      {#if activeSiteSlot === 1}
+                        <span class="slot-targeting-badge">TARGETING</span>
                       {/if}
                     </div>
-                    {#if activeSiteSlot === 1}
-                      <span class="slot-targeting-badge">TARGETING</span>
+                    {#if formatSampleDateRange(lunarPositions)}
+                      <div class="site-slot-details">
+                        <span class="site-slot-coords">{formatSampleDateRange(lunarPositions)}</span>
+                      </div>
                     {/if}
-                  </div>
-                  <div class="site-slot-details">
-                    <span class="site-slot-name">{site1Name || 'Apollo 15'}</span>
-                    <span class="site-slot-coords">{formatSiteCoords(site1Coords)}</span>
-                  </div>
-                  {#if sample1OptimalValue > 0 || sample2OptimalValue > 0}
                     <div class="summary-metric-row">
                       <span class="metric-name">OPTIMAL WINDOW</span>
                       <span class="metric-value">{sample1OptimalValue}h</span>
                     </div>
-                  {/if}
-                </button>
+                  </button>
 
-                <button
-                  type="button"
-                  class="site-slot-card"
-                  class:is-active-slot={activeSiteSlot === 2}
-                  class:is-optimal={activeOptimalSample === 2}
-                  onclick={() => handleSelectSlot(2)}
-                  aria-label="Select Site 2 slot to target"
-                >
-                  <div class="site-slot-header">
-                    <div class="site-slot-tag-wrap">
-                      <span class="slot-active-dot" class:is-active={activeSiteSlot === 2}></span>
-                      <span class="summary-sample-tag s2-tag">SITE 2</span>
-                      {#if activeOptimalSample === 2}
-                        <span class="optimal-sample-badge">OPTIMAL SAMPLE</span>
+                  <!-- Sample 2 Card -->
+                  <button
+                    type="button"
+                    class="compare-sample-summary-card"
+                    class:is-active-slot={activeSiteSlot === 2}
+                    class:is-optimal={activeOptimalSample === 2}
+                    onclick={() => handleSelectSlot(2)}
+                    aria-label="Select Sample 2 to target"
+                  >
+                    <div class="summary-card-header">
+                      <div class="site-slot-tag-wrap">
+                        <span class="slot-active-dot" class:is-active={activeSiteSlot === 2}></span>
+                        <span class="summary-sample-tag s2-tag">SAMPLE 2</span>
+                        {#if activeOptimalSample === 2}
+                          <span class="optimal-sample-badge">OPTIMAL SAMPLE</span>
+                        {/if}
+                      </div>
+                      {#if activeSiteSlot === 2}
+                        <span class="slot-targeting-badge">TARGETING</span>
                       {/if}
                     </div>
-                    {#if activeSiteSlot === 2}
-                      <span class="slot-targeting-badge">TARGETING</span>
+                    {#if formatSampleDateRange(lunarPositionsS2)}
+                      <div class="site-slot-details">
+                        <span class="site-slot-coords">{formatSampleDateRange(lunarPositionsS2)}</span>
+                      </div>
                     {/if}
-                  </div>
-                  <div class="site-slot-details">
-                    <span class="site-slot-name">{site2Name || 'Apollo 11'}</span>
-                    <span class="site-slot-coords">{formatSiteCoords(site2Coords)}</span>
-                  </div>
-                  {#if sample1OptimalValue > 0 || sample2OptimalValue > 0}
                     <div class="summary-metric-row">
                       <span class="metric-name">OPTIMAL WINDOW</span>
                       <span class="metric-value">{sample2OptimalValue}h</span>
                     </div>
-                  {/if}
-                </button>
-              </div>
-
-              <!-- Landmark Category Combobox and Landmark List (same UI as Single Option) -->
-              {@render landmarkBrowser(true)}
-
-              {#if activeOptimalSample}
-                <div class="optimal-verdict-banner">
-                  <span class="verdict-icon">★</span>
-                  <span class="verdict-text">
-                    SITE {activeOptimalSample} ({activeOptimalSample === 1 ? (site1Name || 'SITE 1') : (site2Name || 'SITE 2')}) IS OPTIMAL WITH {optimalSampleValue}h OF SIMULTANEOUS POWER & COMMS
-                  </span>
+                  </button>
                 </div>
-              {/if}
-            </div>
+
+                {#if activeOptimalSample}
+                  <div class="optimal-verdict-banner">
+                    <span class="verdict-icon">★</span>
+                    <span class="verdict-text">
+                      SAMPLE {activeOptimalSample} IS OPTIMAL WITH {optimalSampleValue}h OF SIMULTANEOUS POWER & COMMS
+                    </span>
+                  </div>
+                {:else}
+                  <div class="compare-pending-notice">
+                    <span>Select and calculate date ranges to evaluate optimal sample window.</span>
+                  </div>
+                {/if}
+              </div>
+            {:else}
+              <!-- Sites Compare Mode -->
+              <div class="compare-hud-section">
+                <div class="compare-hud-header">
+                  <span class="compare-hud-title">MISSION WINDOW COMPARISON</span>
+                  <span class="compare-hud-badge">SITES</span>
+                </div>
+
+                <!-- Two Sites Selection Slot Cards -->
+                <div class="sites-slot-selector">
+                  <button
+                    type="button"
+                    class="site-slot-card"
+                    class:is-active-slot={activeSiteSlot === 1}
+                    class:is-optimal={activeOptimalSample === 1}
+                    onclick={() => handleSelectSlot(1)}
+                    aria-label="Select Site 1 slot to target"
+                  >
+                    <div class="site-slot-header">
+                      <div class="site-slot-tag-wrap">
+                        <span class="slot-active-dot" class:is-active={activeSiteSlot === 1}></span>
+                        <span class="summary-sample-tag s1-tag">SITE 1</span>
+                        {#if activeOptimalSample === 1}
+                          <span class="optimal-sample-badge">OPTIMAL SAMPLE</span>
+                        {/if}
+                      </div>
+                      {#if activeSiteSlot === 1}
+                        <span class="slot-targeting-badge">TARGETING</span>
+                      {/if}
+                    </div>
+                    <div class="site-slot-details">
+                      <span class="site-slot-name">{site1Name || 'Apollo 15'}</span>
+                      <span class="site-slot-coords">{formatSiteCoords(site1Coords)}</span>
+                    </div>
+                    {#if sample1OptimalValue > 0 || sample2OptimalValue > 0}
+                      <div class="summary-metric-row">
+                        <span class="metric-name">OPTIMAL WINDOW</span>
+                        <span class="metric-value">{sample1OptimalValue}h</span>
+                      </div>
+                    {/if}
+                  </button>
+
+                  <button
+                    type="button"
+                    class="site-slot-card"
+                    class:is-active-slot={activeSiteSlot === 2}
+                    class:is-optimal={activeOptimalSample === 2}
+                    onclick={() => handleSelectSlot(2)}
+                    aria-label="Select Site 2 slot to target"
+                  >
+                    <div class="site-slot-header">
+                      <div class="site-slot-tag-wrap">
+                        <span class="slot-active-dot" class:is-active={activeSiteSlot === 2}></span>
+                        <span class="summary-sample-tag s2-tag">SITE 2</span>
+                        {#if activeOptimalSample === 2}
+                          <span class="optimal-sample-badge">OPTIMAL SAMPLE</span>
+                        {/if}
+                      </div>
+                      {#if activeSiteSlot === 2}
+                        <span class="slot-targeting-badge">TARGETING</span>
+                      {/if}
+                    </div>
+                    <div class="site-slot-details">
+                      <span class="site-slot-name">{site2Name || 'Apollo 11'}</span>
+                      <span class="site-slot-coords">{formatSiteCoords(site2Coords)}</span>
+                    </div>
+                    {#if sample1OptimalValue > 0 || sample2OptimalValue > 0}
+                      <div class="summary-metric-row">
+                        <span class="metric-name">OPTIMAL WINDOW</span>
+                        <span class="metric-value">{sample2OptimalValue}h</span>
+                      </div>
+                    {/if}
+                  </button>
+                </div>
+
+                {#if activeOptimalSample}
+                  <div class="optimal-verdict-banner">
+                    <span class="verdict-icon">★</span>
+                    <span class="verdict-text">
+                      SITE {activeOptimalSample} ({activeOptimalSample === 1 ? (site1Name || 'SITE 1') : (site2Name || 'SITE 2')}) IS OPTIMAL WITH {optimalSampleValue}h OF SIMULTANEOUS POWER & COMMS
+                    </span>
+                  </div>
+                {:else}
+                  <div class="compare-pending-notice">
+                    <span>Select sites on the globe or type coordinates to evaluate optimal site window.</span>
+                  </div>
+                {/if}
+              </div>
+            {/if}
           {/if}
         </Tabs.Content>
       </Tabs.Root>
     </div>
   {/if}
 </div>
-
-<!-- Reusable Landmark Browser Snippet for Single Option & Sites Compare -->
-{#snippet landmarkBrowser(isSitesCompare = false)}
-  <div class="combobox-section">
-    <span class="combobox-label">LANDMARK CATEGORY</span>
-    <Combobox.Root
-      type="single"
-      bind:value={selectedType}
-      bind:inputValue={typeInputValue}
-      items={landmarkTypes}
-      onValueChange={(val) => {
-        selectedType = val ?? '';
-      }}
-    >
-      <div class="combobox-input-row">
-        <Combobox.Input
-          class="combobox-search-input"
-          placeholder="Select landmark type..."
-          aria-label="Select landmark type"
-        />
-        {#if selectedType}
-          <button
-            type="button"
-            class="combobox-action-btn combobox-clear-btn"
-            onclick={(e) => {
-              e.stopPropagation();
-              selectedType = '';
-              typeInputValue = '';
-            }}
-            title="Clear selection"
-            aria-label="Clear selection"
-          >
-            ✕
-          </button>
-        {/if}
-        <Combobox.Trigger
-          class="combobox-action-btn combobox-trigger-btn"
-          aria-label="Toggle landmark types dropdown"
-        >
-          <svg
-            class="combobox-chevron"
-            width="14"
-            height="14"
-            viewBox="0 0 24 24"
-            fill="none"
-            stroke="currentColor"
-            stroke-width="2.2"
-          >
-            <polyline points="6 9 12 15 18 9"></polyline>
-          </svg>
-        </Combobox.Trigger>
-      </div>
-
-      <Combobox.Portal>
-        <Combobox.Content
-          class="combobox-content-portal"
-          side="bottom"
-          sideOffset={6}
-          align="start"
-        >
-          <Combobox.Viewport class="combobox-viewport">
-            {#each filteredTypeOptions as opt (opt.value)}
-              <Combobox.Item
-                value={opt.value}
-                label={opt.label}
-                class="combobox-item-option"
-              >
-                <span class="option-label">{opt.label}</span>
-                <span class="option-badge">[{opt.count}]</span>
-              </Combobox.Item>
-            {/each}
-            {#if filteredTypeOptions.length === 0}
-              <div class="combobox-empty-row">No matching types found</div>
-            {/if}
-          </Combobox.Viewport>
-        </Combobox.Content>
-      </Combobox.Portal>
-    </Combobox.Root>
-  </div>
-
-  <!-- Landmarks Listed Below Combobox When A Type Is Selected -->
-  {#if selectedType}
-    <div class="landmarks-list-section">
-      <div class="landmarks-list-header">
-        <span class="section-title">{selectedType}</span>
-        <span class="section-count">
-          {listedLandmarks.length} {listedLandmarks.length === 1 ? 'LOCATION' : 'LOCATIONS'}
-        </span>
-      </div>
-
-      <div class="landmarks-scroll-container">
-        {#each listedLandmarks as landmark (landmark.name)}
-          {@const isS1 = isSitesCompare && isLandmarkSite1(landmark)}
-          {@const isS2 = isSitesCompare && isLandmarkSite2(landmark)}
-          {@const isSingleActive = !isSitesCompare && isLandmarkActive(landmark)}
-          {@const isActive = isSingleActive || (isSitesCompare && ((activeSiteSlot === 1 && isS1) || (activeSiteSlot === 2 && isS2)))}
-          <button
-            type="button"
-            class="landmark-item-row"
-            class:is-active={isActive}
-            onclick={() => handleSelectLandmark(landmark)}
-            title="Click to navigate to {landmark.name} on the Moon"
-            aria-label="Select landmark {landmark.name}"
-          >
-            <div class="landmark-left-col">
-              <span class="landmark-dot" class:is-active={isActive}></span>
-              <div class="landmark-text-block">
-                <span class="landmark-name-text">{landmark.name}</span>
-                <span class="landmark-coords-text">
-                  {formatLandmarkCoords(landmark)}
-                </span>
-              </div>
-            </div>
-
-            <div class="landmark-right-col">
-              {#if landmark.diameter_km}
-                <span class="landmark-metric-badge">Ø {Math.round(landmark.diameter_km)} km</span>
-              {:else if landmark.country}
-                <span class="landmark-metric-badge">{landmark.country}</span>
-              {/if}
-
-              {#if isSitesCompare}
-                {#if isS1}
-                  <span class="landmark-slot-tag s1-tag">SITE 1</span>
-                {/if}
-                {#if isS2}
-                  <span class="landmark-slot-tag s2-tag">SITE 2</span>
-                {/if}
-                {#if isActive}
-                  <span class="landmark-locked-tag">TARGETED</span>
-                {/if}
-              {:else if isActive}
-                <span class="landmark-locked-tag">TARGETED</span>
-              {/if}
-            </div>
-          </button>
-        {/each}
-      </div>
-    </div>
-  {:else}
-    <div class="landmarks-empty-state">
-      <div class="empty-state-icon">
-        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">
-          <circle cx="12" cy="12" r="10"></circle>
-          <circle cx="12" cy="12" r="3"></circle>
-          <line x1="12" y1="2" x2="12" y2="5"></line>
-          <line x1="12" y1="19" x2="12" y2="22"></line>
-          <line x1="2" y1="12" x2="5" y2="12"></line>
-          <line x1="19" y1="12" x2="22" y2="12"></line>
-        </svg>
-      </div>
-      <span class="empty-state-title">SELECT A LANDMARK TYPE</span>
-      <p class="empty-state-desc">
-        Choose a landmark category from the combobox above to browse Maria, mountain ranges, and historical landing sites.
-      </p>
-    </div>
-  {/if}
-{/snippet}
 
 <style>
   /* ---------------- HUD Layout ---------------- */
@@ -1242,6 +1206,11 @@
     outline: none;
   }
 
+  :global(.tab-content[hidden]),
+  :global(.tab-content[data-state="inactive"]) {
+    display: none !important;
+  }
+
   /* ---------------- Combobox Styles ---------------- */
   .combobox-section {
     display: flex;
@@ -1615,21 +1584,40 @@
   }
 
   .compare-sample-summary-card {
+    all: unset;
     background: rgba(255, 255, 255, 0.05);
     border: 1px solid rgba(255, 255, 255, 0.12);
     border-radius: 3px;
-    padding: 10px;
+    padding: 8px 10px;
     display: flex;
     flex-direction: column;
-    gap: 6px;
+    gap: 5px;
     box-sizing: border-box;
-    transition: all 0.2s ease;
+    cursor: pointer;
+    transition: all 0.15s ease;
+  }
+
+  .compare-sample-summary-card:hover {
+    background: rgba(255, 255, 255, 0.09);
+    border-color: rgba(255, 255, 255, 0.25);
+  }
+
+  .compare-sample-summary-card.is-active-slot {
+    border-color: rgba(51, 229, 255, 0.7);
+    background: rgba(51, 229, 255, 0.08);
+    box-shadow: 0 0 10px rgba(51, 229, 255, 0.2), inset 0 0 6px rgba(51, 229, 255, 0.06);
   }
 
   .compare-sample-summary-card.is-optimal {
-    background: rgba(74, 222, 128, 0.12);
     border-color: rgba(74, 222, 128, 0.6);
-    box-shadow: 0 0 12px rgba(74, 222, 128, 0.2);
+    background: rgba(74, 222, 128, 0.08);
+    box-shadow: 0 0 10px rgba(74, 222, 128, 0.18);
+  }
+
+  .compare-sample-summary-card.is-active-slot.is-optimal {
+    border-color: rgba(74, 222, 128, 0.85);
+    background: rgba(74, 222, 128, 0.12);
+    box-shadow: 0 0 14px rgba(74, 222, 128, 0.25);
   }
 
   .summary-card-header {
@@ -1733,34 +1721,7 @@
     color: rgba(255, 255, 255, 0.5);
   }
 
-  /* Single Mode Styles */
-  .single-site-section {
-    display: flex;
-    flex-direction: column;
-    gap: 10px;
-    width: 100%;
-  }
-
-  .selected-site-card {
-    background: rgba(255, 255, 255, 0.05);
-    border: 1px solid rgba(51, 229, 255, 0.6);
-    border-radius: 3px;
-    padding: 8px 10px;
-    display: flex;
-    flex-direction: column;
-    gap: 5px;
-    box-sizing: border-box;
-    box-shadow: 0 0 10px rgba(51, 229, 255, 0.15), inset 0 0 6px rgba(51, 229, 255, 0.05);
-  }
-
-  /* Sites Compare Mode Styles */
-  .compare-sites-section {
-    display: flex;
-    flex-direction: column;
-    gap: 10px;
-    width: 100%;
-  }
-
+  /* Sites Compare Mode Slot Styles */
   .sites-slot-selector {
     display: grid;
     grid-template-columns: 1fr 1fr;
@@ -1867,26 +1828,6 @@
     color: rgba(255, 255, 255, 0.6);
     letter-spacing: 0.2px;
     white-space: nowrap;
-  }
-
-  .landmark-slot-tag {
-    font-family: 'Jersey 25', sans-serif;
-    font-size: 11px;
-    letter-spacing: 0.8px;
-    padding: 1px 4px;
-    border-radius: 2px;
-  }
-
-  .landmark-slot-tag.s1-tag {
-    background: rgba(255, 149, 0, 0.2);
-    color: #ffaa55;
-    border: 1px solid rgba(255, 149, 0, 0.4);
-  }
-
-  .landmark-slot-tag.s2-tag {
-    background: rgba(0, 178, 255, 0.2);
-    color: #33e5ff;
-    border: 1px solid rgba(0, 178, 255, 0.4);
   }
 
   @keyframes dropdownSlideDown {
