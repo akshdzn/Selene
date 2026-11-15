@@ -1,5 +1,6 @@
 <script>
   import { onMount, tick } from 'svelte';
+  import { Tabs } from 'bits-ui';
   import { convertToDirectionalCoords, parseCoordinateInput } from './ephemeris.js';
 
   let {
@@ -11,6 +12,7 @@
   } = $props();
 
   let isDropdownOpen = $state(false);
+  let activeTab = $state('single');
   let isEditing = $state(false);
   let editLatInput = $state('');
   let editLonInput = $state('');
@@ -43,20 +45,6 @@
       return convertToDirectionalCoords(hoveredCoords.lat, hoveredCoords.lon, { precision: 3, space: ' ' });
     }
     return convertToDirectionalCoords(lat ?? 26.1322, lon ?? 3.6339, { precision: 3, space: ' ' });
-  });
-
-  let isTargetLocked = $derived(
-    Boolean(selectedCoords && typeof selectedCoords.lat === 'number' && typeof selectedCoords.lon === 'number')
-  );
-
-  let isHoverTracking = $derived(
-    Boolean(!isTargetLocked && hoveredCoords && typeof hoveredCoords.lat === 'number' && typeof hoveredCoords.lon === 'number')
-  );
-
-  let targetingStatus = $derived.by(() => {
-    if (isTargetLocked) return 'SURFACE TARGET LOCKED';
-    if (isHoverTracking) return 'LIVE CURSOR TRACKING';
-    return 'DEFAULT TELEMETRY';
   });
 
   async function startEditing(targetField = 'lat') {
@@ -298,54 +286,31 @@
     </span>
   </div>
 
-  <!-- Telemetry Dropdown Menu -->
+  <!-- Blank Popdown Menu with Full-Width Bits UI Tabs (Single & Compare) -->
   {#if isDropdownOpen}
     <div
       class="telemetry-dropdown"
       role="region"
-      aria-label="Lunar site telemetry dropdown"
+      aria-label="Lunar site popdown"
     >
-      <div class="dropdown-header">
-        <div class="title-group">
-          <span class="telemetry-status-dot" class:is-locked={isTargetLocked}></span>
-          <h2 class="dropdown-title">LUNAR SITE TELEMETRY</h2>
-        </div>
-        <button
-          type="button"
-          class="dropdown-close-btn"
-          onclick={() => (isDropdownOpen = false)}
-          aria-label="Close telemetry dropdown"
-        >
-          [ CLOSE ]
-        </button>
-      </div>
+      <Tabs.Root bind:value={activeTab} class="popdown-tabs">
+        <Tabs.List class="tabs-list">
+          <Tabs.Trigger value="single" class="tab-trigger">
+            Single
+          </Tabs.Trigger>
+          <Tabs.Trigger value="compare" class="tab-trigger">
+            Compare
+          </Tabs.Trigger>
+        </Tabs.List>
 
-      <div class="dropdown-divider"></div>
+        <Tabs.Content value="single" class="tab-content">
+          <!-- Blank popdown content for Single -->
+        </Tabs.Content>
 
-      <div class="dropdown-body">
-        <div class="site-coords-grid">
-          <div class="coord-stat-card">
-            <span class="stat-label">LATITUDE</span>
-            <span class="stat-value">{displayCoords.latStr}</span>
-          </div>
-          <div class="coord-stat-card">
-            <span class="stat-label">LONGITUDE</span>
-            <span class="stat-value">{displayCoords.lonStr}</span>
-          </div>
-        </div>
-
-        <div class="telemetry-status-strip">
-          <span class="status-tag">STATUS:</span>
-          <span class="status-text">{targetingStatus}</span>
-        </div>
-
-        <div class="placeholder-section">
-          <div class="placeholder-badge">[ SITE ANALYSIS PENDING ]</div>
-          <p class="placeholder-desc">
-            Surface reconnaissance telemetry, elevation contours, and mission metadata for this lunar coordinate will appear here.
-          </p>
-        </div>
-      </div>
+        <Tabs.Content value="compare" class="tab-content">
+          <!-- Blank popdown content for Compare -->
+        </Tabs.Content>
+      </Tabs.Root>
     </div>
   {/if}
 </div>
@@ -602,11 +567,11 @@
     width: 423px;
     box-sizing: border-box;
     margin-top: 10px;
-    padding: 16px 20px 20px 20px;
+    padding: 0px;
     background: linear-gradient(
       180deg,
-      rgba(10, 14, 24, 0.62) 0%,
-      rgba(6, 9, 18, 0.52) 100%
+      rgba(10, 14, 24, 0.78) 0%,
+      rgba(6, 9, 18, 0.68) 100%
     );
     backdrop-filter: blur(16px) saturate(160%) brightness(1.05);
     -webkit-backdrop-filter: blur(16px) saturate(160%) brightness(1.05);
@@ -619,192 +584,68 @@
       inset 0 1px 0 rgba(255, 255, 255, 0.18);
     display: flex;
     flex-direction: column;
-    gap: 14px;
-    max-height: calc(100vh - 120px);
-    overflow-y: auto;
+    min-height: 220px;
     animation: dropdownSlideDown 0.22s cubic-bezier(0.16, 1, 0.3, 1);
     transform-origin: top center;
   }
 
-  .telemetry-dropdown::-webkit-scrollbar {
-    width: 5px;
-  }
-
-  .telemetry-dropdown::-webkit-scrollbar-track {
-    background: rgba(255, 255, 255, 0.04);
-  }
-
-  .telemetry-dropdown::-webkit-scrollbar-thumb {
-    background: rgba(255, 255, 255, 0.25);
-    border-radius: 2px;
-  }
-
-  .telemetry-dropdown::-webkit-scrollbar-thumb:hover {
-    background: rgba(255, 255, 255, 0.45);
-  }
-
-  .dropdown-header {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-  }
-
-  .title-group {
-    display: flex;
-    align-items: center;
-    gap: 8px;
-  }
-
-  .telemetry-status-dot {
-    width: 7px;
-    height: 7px;
-    border-radius: 50%;
-    background: #58b5ff;
-    box-shadow: 0 0 8px #58b5ff;
-    display: inline-block;
-    animation: pulseDot 2s infinite ease-in-out;
-  }
-
-  .telemetry-status-dot.is-locked {
-    background: #4ade80;
-    box-shadow: 0 0 8px #4ade80;
-  }
-
-  .dropdown-title {
-    margin: 0;
-    font-family: "Jersey 25", sans-serif;
-    font-size: 21px;
-    letter-spacing: 1.4px;
-    color: #ffffff;
-    line-height: 1.15;
-    text-shadow: 0 1px 3px rgba(0, 0, 0, 0.95), 0 0 10px rgba(0, 0, 0, 0.8);
-  }
-
-  .dropdown-close-btn {
-    padding: 4px 12px;
-    background: rgba(255, 255, 255, 0.08);
-    color: #ffffff;
-    border: 1px solid rgba(255, 255, 255, 0.35);
-    border-radius: 3px;
-    font-family: "Jersey 25", sans-serif;
-    font-size: 15px;
-    letter-spacing: 1px;
-    cursor: pointer;
-    backdrop-filter: blur(8px);
-    box-shadow: 0 0 10px rgba(255, 255, 255, 0.08);
-    transition: all 0.18s ease;
-    text-shadow: 0 1px 2px rgba(0, 0, 0, 0.9);
-  }
-
-  .dropdown-close-btn:hover {
-    background: rgba(255, 255, 255, 0.2);
-    border-color: #ffffff;
-    box-shadow: 0 0 14px rgba(255, 255, 255, 0.3);
-    transform: scale(1.03);
-  }
-
-  .dropdown-close-btn:active {
-    transform: scale(0.97);
-  }
-
-  .dropdown-divider {
-    height: 1px;
-    background: linear-gradient(
-      90deg,
-      rgba(255, 255, 255, 0.35) 0%,
-      rgba(255, 255, 255, 0.06) 100%
-    );
-  }
-
-  .dropdown-body {
+  :global(.popdown-tabs) {
+    width: 100%;
     display: flex;
     flex-direction: column;
     gap: 12px;
-    user-select: text;
   }
 
-  .site-coords-grid {
+  :global(.tabs-list) {
+    width: 100%;
     display: grid;
     grid-template-columns: 1fr 1fr;
-    gap: 10px;
-  }
-
-  .coord-stat-card {
-    padding: 10px 12px;
     background: rgba(255, 255, 255, 0.06);
-    display: flex;
-    flex-direction: column;
-    gap: 3px;
-    border: 1px solid rgba(255, 255, 255, 0.12);
-    box-shadow: inset 0 0 12px rgba(0, 0, 0, 0.25);
+    /*border: 1px solid rgba(255, 255, 255, 0.15);*/
+    border-radius: 2px;
+    box-sizing: border-box;
+    padding: 3px;
+    gap: 4px;
   }
 
-  .stat-label {
-    font-family: "Jersey 25", sans-serif;
-    font-size: 14px;
-    color: #ffaa55;
-    letter-spacing: 1.1px;
-    text-shadow: 0 1px 3px rgba(0, 0, 0, 0.95);
-  }
-
-  .stat-value {
-    font-family: "Space Grotesk", sans-serif;
-    font-size: 17px;
-    font-weight: 600;
-    color: #ffffff;
-    letter-spacing: 0.5px;
-    text-shadow: 0 1px 3px rgba(0, 0, 0, 0.95), 0 0 6px rgba(0, 0, 0, 0.7);
-  }
-
-  .telemetry-status-strip {
+  :global(.tab-trigger) {
+    all: unset;
     display: flex;
     align-items: center;
-    gap: 8px;
-    padding: 6px 10px;
-    background: rgba(255, 255, 255, 0.04);
-    border: 1px solid rgba(255, 255, 255, 0.08);
-    font-family: "Jersey 25", sans-serif;
-    letter-spacing: 1px;
+    justify-content: center;
+    height: 36px;
+    font-family: 'Space Grotesk', -apple-system, BlinkMacSystemFont, sans-serif;
+    font-size: 14px;
+    font-weight: 600;
+    letter-spacing: 0.8px;
+    color: rgba(255, 255, 255, 0.65);
+    background: transparent;
+    border: none;
+    border-radius: 2px;
+    cursor: pointer;
+    box-sizing: border-box;
+    transition: all 0.15s ease;
+    user-select: none;
   }
 
-  .status-tag {
-    font-size: 13px;
-    color: rgba(255, 255, 255, 0.55);
-    text-shadow: 0 1px 2px rgba(0, 0, 0, 0.9);
+  :global(.tab-trigger:hover:not([data-state="active"])) {
+    color: #ffffff;
+    background: rgba(255, 255, 255, 0.1);
   }
 
-  .status-text {
-    font-size: 15px;
-    color: #79c0ff;
-    letter-spacing: 1.2px;
-    text-shadow: 0 1px 3px rgba(0, 0, 0, 0.95);
+  :global(.tab-trigger[data-state="active"]) {
+    background: rgba(255, 255, 255, 0.3);
+    color: white;
+    font-weight: 700;
+    /*box-shadow: 0 0 12px rgba(255, 149, 0, 0.35);*/
   }
 
-  .placeholder-section {
-    padding: 12px 14px;
-    background: rgba(0, 0, 0, 0.25);
-    border: 1px dashed rgba(255, 255, 255, 0.2);
-    display: flex;
-    flex-direction: column;
-    gap: 6px;
-  }
-
-  .placeholder-badge {
-    font-family: "Jersey 25", sans-serif;
-    font-size: 15px;
-    color: #e2e8f0;
-    letter-spacing: 1.1px;
-    text-shadow: 0 1px 3px rgba(0, 0, 0, 0.95);
-  }
-
-  .placeholder-desc {
-    margin: 0;
-    font-family: "Space Grotesk", sans-serif;
-    font-size: 13px;
-    line-height: 1.45;
-    color: rgba(255, 255, 255, 0.88);
-    letter-spacing: 0.3px;
-    text-shadow: 0 1px 3px rgba(0, 0, 0, 0.95);
+  :global(.tab-content) {
+    width: 100%;
+    flex: 1;
+    min-height: 140px;
+    box-sizing: border-box;
+    outline: none;
   }
 
   @keyframes dropdownSlideDown {
