@@ -3,7 +3,7 @@
 	import * as THREE from 'three';
 	import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
 	import UTIF from 'three/examples/jsm/libs/utif.module.js';
-	import { fetchCurrentLunarPositions, vector3ToLatLon, latLonToVector3, formatLatLon } from './ephemeris.js';
+	import { fetchCurrentLunarPositions, vector3ToLatLon, latLonToVector3, formatLatLon, calculateEarthRotation } from './ephemeris.js';
 	import moonUrl from '../assets/moon.webp';
 	import moonDisplacementUrl from '../assets/moon_displacement.tif';
 	import earthUrl from '../assets/earth.jpg';
@@ -44,8 +44,13 @@
 	let raySpritesRef = [];
 	let sunBloomRef;
 	let sunLightRef;
+	let earthGroupRef;
 	let earthMeshRef;
 	let selectedCursorRef;
+	let targetEarthRotation = 0;
+	let currentEarthRotation = 0;
+	let lastScrubTime = typeof performance !== 'undefined' ? performance.now() * 0.001 : 0;
+	let baselineDatasetHour = 12;
 
 	$effect(() => {
 		const targetLat = selectedCoords?.lat ?? lunarPositions?.dataset?.coordinates?.latitude;
@@ -74,10 +79,12 @@
 			subSolarCoords = formatLatLon(lat, lon);
 		}
 		if (positions.earthPos) {
-			earthMeshRef?.position.copy(positions.earthPos);
+			earthGroupRef?.position.copy(positions.earthPos);
 			const { lat, lon } = vector3ToLatLon(positions.earthPos);
 			subEarthCoords = formatLatLon(lat, lon);
 		}
+		targetEarthRotation = calculateEarthRotation(positions, baselineDatasetHour);
+		lastScrubTime = typeof performance !== 'undefined' ? performance.now() * 0.001 : 0;
 	}
 
 	$effect(() => {
@@ -730,14 +737,29 @@
 			`
 		});
 
+		const earthGroup = new THREE.Group();
+		earthGroup.name = 'background-earth-group';
+		earthGroup.position.copy(earthPos);
+		// Earth's authentic axial obliquity tilt (23.44°)
+		earthGroup.rotation.z = 23.44 * (Math.PI / 180);
+
 		const earth = new THREE.Mesh(
 			new THREE.SphereGeometry(0.85, 48, 48),
 			earthMaterial
 		);
-		earth.position.copy(earthPos);
-		earth.rotation.y = 1.2;
-		scene.add(earth);
+		earthGroup.add(earth);
+		scene.add(earthGroup);
 		earthMeshRef = earth;
+		earthGroupRef = earthGroup;
+
+		if (lunarPositions) {
+			if (typeof lunarPositions.hour === 'number') {
+				baselineDatasetHour = lunarPositions.hour;
+			}
+			targetEarthRotation = calculateEarthRotation(lunarPositions, baselineDatasetHour);
+			currentEarthRotation = targetEarthRotation;
+			earth.rotation.y = targetEarthRotation;
+		}
 
 		if (!lunarPositions) {
 			fetchCurrentLunarPositions(0, 0).then((res) => {
@@ -1151,7 +1173,17 @@
 			const time = (timestamp || performance.now()) * 0.001;
 			updatePlaceMarkersAnimation(placeMarkers, time, currentHovered);
 
-			earthMaterial.uniforms.uSunDirection.value.subVectors(horizontalStreak.position, earth.position).normalize();
+			// Realistic Earth axial rotation driven by lunar ephemeris dataset + natural planetary spin
+			currentEarthRotation = THREE.MathUtils.lerp(currentEarthRotation, targetEarthRotation, 0.12);
+			const liveSpin = (time - lastScrubTime) * 0.03;
+			if (earth) {
+				earth.rotation.y = currentEarthRotation + liveSpin;
+			}
+
+			const earthWorldPos = new THREE.Vector3();
+			earth.getWorldPosition(earthWorldPos);
+			earthMaterial.uniforms.uSunDirection.value.subVectors(horizontalStreak.position, earthWorldPos).normalize();
+
 			renderer.render(scene, camera);
 		}
 		animate();
@@ -1188,6 +1220,8 @@
 			moonDisplacementMap?.dispose();
 			sunLight.dispose();
 			ambientLight.dispose();
+			scene.remove(earthGroup);
+			earthGroup.remove(earth);
 			earth.geometry.dispose();
 			earth.material.dispose();
 			earthTexture.dispose();

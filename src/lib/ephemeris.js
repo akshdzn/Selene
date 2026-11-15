@@ -103,6 +103,50 @@ export function calculateCelestialPositions(sunEntry, earthEntry, siteLatDeg = 0
   };
 }
 
+/**
+ * Calculates realistic Earth rotation angle (in radians) around its polar axis using lunar ephemeris data.
+ * - Aligns Greenwich (0° longitude) with the Sun at 12:00 UTC (solar noon).
+ * - Progresses by 15° per hour (2π / 24 rad) across the Horizons 20-day dataset.
+ * - Rotates West-to-East in standard Selenographic orientation.
+ *
+ * @param {object} positions Active lunar positions object
+ * @param {number} [baselineHour=12] Baseline dataset hour (defaults to 12)
+ * @returns {number} Earth rotation angle in radians around Y axis
+ */
+export function calculateEarthRotation(positions, baselineHour = 12) {
+  if (!positions) return 0;
+
+  const sPos = positions.sunPos || new THREE.Vector3(52, 0, 0);
+  const ePos = positions.earthPos || new THREE.Vector3(0, 0, 28);
+
+  // Direction vector from Earth to Sun in horizontal Selenographic plane
+  const sunDir = new THREE.Vector3().subVectors(sPos, ePos).normalize();
+  const phiSun = Math.atan2(sunDir.x, sunDir.z);
+
+  // Determine step index from 481-hour dataset (0 to 480)
+  let stepDiff = 0;
+  if (typeof positions.currentIndex === 'number') {
+    stepDiff = positions.currentIndex - 240;
+  }
+
+  let baseH = baselineHour;
+  if (typeof positions.hour === 'number' && baselineHour === 12) {
+    baseH = positions.hour;
+  } else if (positions.sunEntry?.time || positions.time) {
+    const timeStr = positions.sunEntry?.time || positions.time || '';
+    const m = timeStr.trim().match(/(\d{4})-([A-Za-z0-9]+)-(\d{1,2})\s+(\d{1,2}):(\d{2})/);
+    if (m && baselineHour === 12) {
+      baseH = parseInt(m[4], 10) + parseInt(m[5], 10) / 60;
+    }
+  }
+
+  // Hour offset relative to baseline step (240) and solar noon
+  const hourOffset = (baseH - 12) + stepDiff;
+
+  // Align Greenwich with solar noon and rotate West-to-East (15°/h)
+  return phiSun + hourOffset * (Math.PI / 12) - Math.PI / 2;
+}
+
 
 
 /**
@@ -212,8 +256,31 @@ export function convertPlaceCoordinates(place, options = {}) {
   };
 }
 
-export async function fetchCurrentLunarPositions(lat = 0, lon = 0) {
-  const { startTime, stopTime, hour, startDate, endDate, now } = getDateRange20Days();
+export async function fetchCurrentLunarPositions(lat = 0, lon = 0, customRange = null) {
+  let startTime, stopTime, hour, startDate, endDate, now;
+  const pad = (n) => String(n).padStart(2, '0');
+
+  if (customRange?.startDate && customRange?.endDate) {
+    now = new Date();
+    hour = now.getHours();
+    startDate = typeof customRange.startDate === 'string'
+      ? new Date(customRange.startDate + (customRange.startDate.length === 10 ? 'T00:00:00' : ''))
+      : customRange.startDate;
+    endDate = typeof customRange.endDate === 'string'
+      ? new Date(customRange.endDate + (customRange.endDate.length === 10 ? 'T23:00:00' : ''))
+      : customRange.endDate;
+
+    startTime = customRange.startTime || `${startDate.getFullYear()}-${pad(startDate.getMonth() + 1)}-${pad(startDate.getDate())} ${pad(startDate.getHours())}:00`;
+    stopTime = customRange.stopTime || `${endDate.getFullYear()}-${pad(endDate.getMonth() + 1)}-${pad(endDate.getDate())} ${pad(endDate.getHours())}:00`;
+  } else {
+    const range = getDateRange20Days();
+    startTime = range.startTime;
+    stopTime = range.stopTime;
+    hour = range.hour;
+    startDate = range.startDate;
+    endDate = range.endDate;
+    now = range.now;
+  }
   try {
     const data = await getLunarData(lat, lon, { startTime, stopTime });
     const sunList = Array.isArray(data.sun) ? data.sun : [];

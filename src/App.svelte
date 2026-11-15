@@ -67,6 +67,10 @@
     activeLunarPositions = {
       ...lunarPositions,
       ...event.celestialPositions,
+      sunEntry: event.sunEntry,
+      earthEntry: event.earthEntry,
+      time: event.time,
+      currentIndex: event.index,
       hour: event.index % 24
     };
   }

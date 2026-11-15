@@ -387,6 +387,9 @@
 			if (!isWarping) {
 				controls.update();
 				starSystem.update(camera, 0, null);
+				if (earthMesh) {
+					earthMesh.rotation.y += 0.001;
+				}
 			} else {
 				const now = timestamp || performance.now();
 				const elapsed = now - flightStartTime;
