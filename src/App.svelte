@@ -580,6 +580,7 @@
     position: relative;
     width: 100vw;
     height: 100vh;
+    height: 100dvh;
     overflow: hidden;
     background: #000;
   }
@@ -768,5 +769,70 @@
     33%  {background-position:10px  10px}
     66%  {background-position:0    20px,10px 10px,20px 0   }
     100% {background-position:0     0, 10px 10px, 20px 20px}
+  }
+
+  /* Responsive Mobile Adaptations */
+  @media (max-width: 768px) and (orientation: portrait) {
+    .hud-date-picker {
+      top: 92px;
+      transform: none;
+      z-index: 20;
+    }
+
+    .start-picker {
+      left: 10px;
+    }
+
+    .end-picker {
+      right: 10px;
+    }
+
+    .compare-sample-card {
+      width: calc(50vw - 14px);
+      max-width: 175px;
+      padding: 8px 6px;
+      gap: 6px;
+    }
+
+    .compare-tag {
+      font-size: 11px;
+      padding: 2px 4px;
+      letter-spacing: 0.6px;
+    }
+
+    .optimal-sample-badge {
+      font-size: 10px;
+      padding: 0 4px;
+      letter-spacing: 0.6px;
+    }
+
+    .compare-duration {
+      font-size: 10px;
+    }
+
+    .ephemeris-loading-hud {
+      font-size: 12px;
+      gap: 14px;
+      padding: 10px 16px;
+      bottom: 24px;
+      width: calc(100vw - 32px);
+      box-sizing: border-box;
+      justify-content: center;
+    }
+  }
+
+  @media (max-width: 900px) and (orientation: landscape) {
+    .start-picker {
+      left: 14px;
+    }
+
+    .end-picker {
+      right: 14px;
+    }
+
+    .compare-sample-card {
+      padding: 8px;
+      gap: 6px;
+    }
   }
 </style>

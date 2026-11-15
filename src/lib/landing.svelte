@@ -995,7 +995,10 @@
 		<button class="info-btn" onclick={() => (showInfo = !showInfo)}>
 			[ INFO ]
 		</button>
-		<div class="overlay-hint">Drag to rotate Earth &bull; Scroll to zoom</div>
+		<div class="overlay-hint">
+			<span class="hint-desktop">Drag to rotate Earth &bull; Scroll to zoom</span>
+			<span class="hint-mobile">Touch to rotate &bull; Pinch to zoom</span>
+		</div>
 	{/if}
 
 	{#if showInfo}
@@ -1060,6 +1063,7 @@
 		position: relative;
 		width: 100vw;
 		height: 100vh;
+		height: 100dvh;
 		background: #000;
 		cursor: grab;
 		overflow: hidden;
@@ -1243,5 +1247,41 @@
 		font-size: 18px;
 		letter-spacing: 0.5px;
 		pointer-events: none;
+		white-space: nowrap;
+	}
+
+	.hint-mobile {
+		display: none;
+	}
+
+	@media (hover: none), (max-width: 768px) {
+		.hint-desktop {
+			display: none;
+		}
+		.hint-mobile {
+			display: inline;
+		}
+	}
+
+	@media (max-width: 768px) {
+		.travel-btn {
+			bottom: max(64px, calc(env(safe-area-inset-bottom) + 54px));
+			font-size: 19px;
+			padding: 8px 20px;
+			white-space: nowrap;
+		}
+		.info-btn {
+			bottom: max(16px, env(safe-area-inset-bottom));
+			left: 16px;
+			font-size: 18px;
+			padding: 6px 16px;
+		}
+		.overlay-hint {
+			bottom: max(18px, env(safe-area-inset-bottom));
+			font-size: 13px;
+			left: auto;
+			right: 16px;
+			transform: none;
+		}
 	}
 </style>

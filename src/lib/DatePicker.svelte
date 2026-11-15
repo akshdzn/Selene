@@ -196,6 +196,7 @@
     border-radius: 0px;
     height: 44px;
     width: 220px;
+    max-width: 100%;
     padding: 0 12px;
     box-sizing: border-box;
     cursor: pointer;
@@ -294,7 +295,8 @@
     font-family: 'Space Grotesk', -apple-system, BlinkMacSystemFont, sans-serif;
     user-select: none;
     border-radius: 0px;
-    min-width: 250px;
+    min-width: 240px;
+    max-width: calc(100vw - 20px);
     box-sizing: border-box;
   }
 
@@ -418,5 +420,28 @@
 
   :global(.calendar-day[data-outside-month]) {
     opacity: 0.2;
+  }
+
+  @media (max-width: 768px) {
+    .date-input-box {
+      width: 100%;
+      max-width: 165px;
+      height: 38px;
+      padding: 0 8px;
+    }
+
+    :global(.bits-date-segment) {
+      font-size: 13px;
+      padding: 1px 2px;
+    }
+
+    .date-picker-label {
+      font-size: 10px;
+    }
+
+    .calendar-trigger-btn {
+      width: 24px;
+      height: 24px;
+    }
   }
 </style>

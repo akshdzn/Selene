@@ -880,7 +880,7 @@
     top: 27px;
     left: 50%;
     transform: translateX(-50%);
-    width: 423px;
+    width: min(423px, calc(100vw - 20px));
     display: flex;
     flex-direction: column;
     align-items: center;
@@ -891,7 +891,7 @@
 
   /* Frosted Box: 423px x 58px */
   .lunar-hud-box {
-    width: 423px;
+    width: 100%;
     height: 58px;
     background: rgba(255, 255, 255, 0.1);
     -webkit-backdrop-filter: blur(10px);
@@ -944,7 +944,7 @@
   .coord-value {
     font-family: 'Space Grotesk', -apple-system, BlinkMacSystemFont, sans-serif;
     font-weight: 500;
-    font-size: 24px;
+    font-size: clamp(16px, 4.8vw, 24px);
     color: #ffffff;
     line-height: normal;
     white-space: nowrap;
@@ -960,7 +960,7 @@
     outline: none;
     font-family: 'Space Grotesk', -apple-system, BlinkMacSystemFont, sans-serif;
     font-weight: 500;
-    font-size: 22px;
+    font-size: clamp(15px, 4.4vw, 22px);
     color: #ffffff;
     line-height: normal;
     letter-spacing: 0.5px;
@@ -1050,7 +1050,7 @@
 
   /* Labels and Arrow Button Row */
   .lunar-hud-labels {
-    width: 423px;
+    width: 100%;
     margin-top: 6px;
     display: flex;
     align-items: center;
@@ -1063,7 +1063,7 @@
   .hud-label {
     font-family: 'Space Grotesk', -apple-system, BlinkMacSystemFont, sans-serif;
     font-weight: 500;
-    font-size: 16px;
+    font-size: clamp(12px, 3.2vw, 16px);
     color: #ffffff;
     line-height: normal;
     white-space: nowrap;
@@ -1126,7 +1126,7 @@
   /* ---------------- Dropdown Menu ---------------- */
   /* Translucent frosted glass HUD dropdown attached below the coordinates HUD */
   .telemetry-dropdown {
-    width: 423px;
+    width: 100%;
     box-sizing: border-box;
     margin-top: 10px;
     padding: 0px;
@@ -1148,6 +1148,8 @@
     display: flex;
     flex-direction: column;
     min-height: 220px;
+    max-height: calc(100dvh - 140px);
+    overflow-y: auto;
     max-height: 480px;
     overflow-y: auto;
     scrollbar-width: thin;
@@ -1355,7 +1357,9 @@
 
   :global(.combobox-content-portal) {
     z-index: 9999;
-    min-width: 395px;
+    width: 100%;
+    max-width: calc(100vw - 32px);
+    min-width: 0;
     max-height: 240px;
     background: rgba(10, 14, 24, 0.94);
     -webkit-backdrop-filter: blur(20px) saturate(160%);
@@ -1959,6 +1963,40 @@
     }
     to {
       opacity: 1;
+    }
+  }
+
+  /* Responsive Mobile Adaptations */
+  @media (max-width: 768px) {
+    .lunar-hud-container {
+      top: max(10px, env(safe-area-inset-top));
+      width: calc(100vw - 20px);
+    }
+
+    .lunar-hud-box {
+      height: 52px;
+    }
+
+    .hud-divider {
+      height: 52px;
+    }
+
+    .coord-col-left {
+      padding-left: 10px;
+    }
+
+    .coord-col-right {
+      padding-right: 10px;
+    }
+
+    .edit-actions-bar {
+      gap: 6px;
+    }
+
+    .edit-action-btn {
+      width: 34px;
+      height: 34px;
+      font-size: 15px;
     }
   }
 </style>

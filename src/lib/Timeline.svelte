@@ -1395,4 +1395,103 @@
     padding: 0px 4px;
     border-radius: 2px;
   }
+
+  /* Touch & Mobile Responsiveness */
+  @media (hover: none), (max-width: 768px) {
+    .playhead-decorative {
+      opacity: 1;
+    }
+  }
+
+  @media (max-width: 768px) {
+    .timeline-wrapper {
+      width: calc(100vw - 16px);
+      bottom: max(8px, env(safe-area-inset-bottom));
+    }
+
+    .timeline-track {
+      height: 34px;
+    }
+
+    .badge-item {
+      font-size: 11px;
+      padding: 2px 5px;
+      letter-spacing: 0.2px;
+    }
+
+    .badges-row {
+      height: 72px;
+    }
+
+    .end-tick {
+      height: 20px;
+    }
+
+    .timeline-scalable-content.is-compare {
+      gap: 10px;
+    }
+
+    .badges-row.compare-badges-row {
+      height: 60px;
+    }
+
+    .bottom-info-row {
+      margin-top: 6px;
+      flex-wrap: wrap;
+      gap: 6px;
+    }
+
+    .bottom-right-hint {
+      display: none;
+    }
+
+    .bottom-right-hint.is-coords {
+      display: block;
+      font-size: 11px;
+    }
+
+    .bottom-left-group {
+      gap: 6px;
+      flex-wrap: wrap;
+    }
+
+    .bottom-left-time {
+      font-size: 11px;
+      height: 20px;
+      padding: 0 6px;
+      line-height: 20px;
+      gap: 5px;
+    }
+
+    .timeline-scale-control {
+      height: 20px;
+      padding: 0 6px;
+      gap: 5px;
+    }
+
+    .scale-label {
+      font-size: 10px;
+    }
+
+    .scale-slider {
+      width: 48px;
+    }
+
+    .scale-val {
+      font-size: 10px;
+    }
+
+    .compare-time-pill {
+      height: 20px;
+      padding: 0 6px;
+      font-size: 11px;
+      line-height: 20px;
+      gap: 4px;
+    }
+
+    .pill-optimal-tag {
+      font-size: 8.5px;
+      padding: 0 2px;
+    }
+  }
 </style>

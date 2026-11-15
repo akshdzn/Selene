@@ -1114,9 +1114,9 @@
 
 		function onClick(e) {
 			if (!container) return;
-			// Only select if not dragging camera
+			// Only select if not dragging camera (allow natural finger wiggle on mobile touch taps)
 			const dist = Math.hypot(e.clientX - pointerDownPos.x, e.clientY - pointerDownPos.y);
-			if (dist > 5) return;
+			if (dist > 12) return;
 
 			const rect = container.getBoundingClientRect();
 			mouse.x = ((e.clientX - rect.left) / rect.width) * 2 - 1;
@@ -1279,7 +1279,7 @@
 					const screenX = (proj.x * 0.5 + 0.5) * container.clientWidth;
 					const screenY = (-proj.y * 0.5 + 0.5) * container.clientHeight;
 
-					const marginX = 160;
+					const marginX = Math.min(160, Math.max(20, container.clientWidth * 0.25));
 					const clampedX = Math.max(marginX, Math.min(container.clientWidth - marginX, screenX));
 					const isNearTop = screenY < 90;
 					const clampedY = isNearTop ? screenY + 28 : screenY - 24;

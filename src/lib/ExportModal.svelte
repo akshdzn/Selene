@@ -1310,4 +1310,86 @@
       transform: scale(1) translateY(0);
     }
   }
+
+  /* Mobile Responsive Adaptations */
+  @media (max-width: 640px) {
+    .modal-backdrop {
+      padding: 8px;
+    }
+
+    .export-dialog {
+      width: 100%;
+      max-width: calc(100vw - 16px);
+      max-height: 94vh;
+      max-height: 94dvh;
+    }
+
+    .dialog-header {
+      padding: 12px 14px 10px 14px;
+    }
+
+    .dialog-title {
+      font-size: 16px;
+    }
+
+    .dialog-subtitle {
+      font-size: 11px;
+    }
+
+    .dialog-body {
+      padding: 12px 14px;
+      gap: 12px;
+    }
+
+    .date-controls-grid {
+      grid-template-columns: 1fr 1fr;
+      gap: 8px;
+    }
+
+    .date-presets-group {
+      grid-column: 1 / -1;
+    }
+
+    .presets-buttons {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 6px;
+    }
+
+    .site-list-card {
+      padding: 8px 10px;
+    }
+
+    .site-title {
+      font-size: 13px;
+    }
+
+    .site-coords-pill {
+      font-size: 10px;
+      padding: 1px 4px;
+    }
+
+    .dialog-footer {
+      padding: 10px 14px;
+      flex-direction: column;
+      gap: 10px;
+      align-items: stretch;
+    }
+
+    .footer-left {
+      align-items: center;
+      text-align: center;
+    }
+
+    .footer-actions {
+      display: flex;
+      gap: 8px;
+      width: 100%;
+    }
+
+    .footer-btn {
+      flex: 1;
+      justify-content: center;
+    }
+  }
 </style>
