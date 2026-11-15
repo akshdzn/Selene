@@ -557,7 +557,6 @@
 		background: rgba(255, 255, 255, 0.08);
 		color: #ffffff;
 		border: 1px solid rgba(255, 255, 255, 0.45);
-		border-radius: 4px;
 		font-family: "Jersey 25", sans-serif;
 		font-size: 22px;
 		letter-spacing: 1px;
@@ -595,8 +594,6 @@
 		padding: 24px 28px;
 		background: rgba(10, 10, 16, 0.88);
 		color: #ffffff;
-		border: 1px solid rgba(255, 255, 255, 0.45);
-		border-radius: 4px;
 		font-family: "Jersey 25", sans-serif;
 		letter-spacing: 1px;
 		backdrop-filter: blur(14px);

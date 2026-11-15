@@ -150,13 +150,14 @@
 		gap: 16px;
 		padding: 2px 4px 8px 4px;
 		color: #ffffff;
-		font-family: "Jersey 25", sans-serif;
+		font-family: "Space Grotesk", sans-serif;
 		letter-spacing: 0.8px;
 		user-select: text;
 	}
 
 	.info-header {
 		display: flex;
+		font-family: "Jersey 25", sans-serif;
 		flex-direction: column;
 		gap: 8px;
 	}
@@ -201,6 +202,7 @@
 	}
 
 	.block-title {
+	    font-family: "Jersey 25", sans-serif;
 		font-size: 17px;
 		color: #ff9955;
 		letter-spacing: 1.2px;
@@ -222,16 +224,12 @@
 	.item-card {
 		padding: 10px 14px;
 		background: rgba(255, 255, 255, 0.04);
-		border: 1px solid rgba(255, 255, 255, 0.15);
-		border-radius: 4px;
 		display: flex;
 		flex-direction: column;
 		gap: 4px;
-		transition: border-color 0.2s ease, background 0.2s ease;
 	}
 
 	.item-card:hover {
-		border-color: rgba(255, 255, 255, 0.35);
 		background: rgba(255, 255, 255, 0.07);
 	}
 
@@ -266,8 +264,6 @@
 		gap: 12px;
 		padding: 10px 14px;
 		background: rgba(255, 255, 255, 0.04);
-		border: 1px solid rgba(255, 255, 255, 0.15);
-		border-radius: 4px;
 		text-decoration: none;
 		color: #ffffff;
 		transition: all 0.2s ease;
@@ -275,7 +271,6 @@
 
 	.source-card:hover {
 		background: rgba(255, 255, 255, 0.08);
-		border-color: rgba(255, 255, 255, 0.4);
 		transform: translateX(2px);
 	}
 
@@ -286,7 +281,6 @@
 		align-items: center;
 		justify-content: center;
 		background: #ffffff;
-		border-radius: 4px;
 		padding: 4px 6px;
 		flex-shrink: 0;
 		box-shadow: 0 0 10px rgba(255, 255, 255, 0.12);
