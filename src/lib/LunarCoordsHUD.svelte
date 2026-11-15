@@ -3,6 +3,7 @@
   import { Tabs, Combobox } from 'bits-ui';
   import { convertToDirectionalCoords, parseCoordinateInput, calculateOptimalValue } from './ephemeris.js';
   import { getLandmarkTypes, getLandmarksByType, findLandmarkByCoords } from './places.js';
+  import ExportModal from './ExportModal.svelte';
 
   let {
     selectedCoords = null,
@@ -101,6 +102,27 @@
 
   let displayCoords = $derived.by(() => {
     return convertToDirectionalCoords(currentLatNum, currentLonNum, { precision: 3, space: ' ' });
+  });
+
+  let isExportModalOpen = $state(false);
+
+  let currentTargetSite = $derived.by(() => {
+    if (selectedLandmark?.name) {
+      return { name: selectedLandmark.name, lat: currentLatNum, lon: currentLonNum };
+    }
+    if (selectedCoords?.name) {
+      return { name: selectedCoords.name, lat: currentLatNum, lon: currentLonNum };
+    }
+    if (mode === 'compare' && compareType === 'sites') {
+      const activeName = activeSiteSlot === 1 ? (site1Name || 'Site 1') : (site2Name || 'Site 2');
+      return { name: activeName, lat: currentLatNum, lon: currentLonNum };
+    }
+    const found = findLandmarkByCoords(currentLatNum, currentLonNum);
+    return {
+      name: found?.name || 'Target Location',
+      lat: currentLatNum,
+      lon: currentLonNum
+    };
   });
 
   async function startEditing(targetField = 'lat') {
@@ -425,9 +447,9 @@
       class="hud-arrow-btn"
       class:is-open={isDropdownOpen}
       onclick={() => (isDropdownOpen = !isDropdownOpen)}
-      aria-label="Toggle lunar site telemetry dropdown"
+      aria-label="Toggle lunar site dropdown"
       aria-expanded={isDropdownOpen}
-      title={isDropdownOpen ? "Collapse site telemetry" : "View site telemetry"}
+      title={isDropdownOpen ? "Collapse site options" : "View site options"}
       data-node-id="49:6"
       data-name="Frame"
     >
@@ -818,9 +840,34 @@
           {/if}
         </Tabs.Content>
       </Tabs.Root>
+
+      <!-- Dropdown Footer with Export Button in bottom-right corner -->
+      <div class="hud-dropdown-footer">
+        <button
+          type="button"
+          class="hud-export-btn"
+          onclick={() => (isExportModalOpen = true)}
+          aria-label="Export lunar site data"
+          title="Export lunar site data (.json)"
+        >
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2">
+            <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+            <polyline points="7 10 12 15 17 10"></polyline>
+            <line x1="12" y1="15" x2="12" y2="3"></line>
+          </svg>
+          <span>EXPORT</span>
+        </button>
+      </div>
     </div>
   {/if}
 </div>
+
+<ExportModal
+  bind:isOpen={isExportModalOpen}
+  currentSite={currentTargetSite}
+  defaultStartDate={lunarPositions?.timeRange?.startDate ? String(lunarPositions.timeRange.startDate).split('T')[0] : '2026-03-01'}
+  defaultEndDate={lunarPositions?.timeRange?.endDate ? String(lunarPositions.timeRange.endDate).split('T')[0] : '2026-03-21'}
+/>
 
 <style>
   /* ---------------- HUD Layout ---------------- */
@@ -1828,6 +1875,49 @@
     color: rgba(255, 255, 255, 0.6);
     letter-spacing: 0.2px;
     white-space: nowrap;
+  }
+
+  /* ---------------- Export Button Styles ---------------- */
+  .hud-dropdown-footer {
+    width: 100%;
+    display: flex;
+    justify-content: flex-end;
+    margin-top: 10px;
+    padding: 10px 14px 12px 14px;
+    border-top: 1px solid rgba(255, 255, 255, 0.1);
+    box-sizing: border-box;
+    background: rgba(0, 0, 0, 0.2);
+  }
+
+  .hud-export-btn {
+    all: unset;
+    cursor: pointer;
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 4px 10px;
+    background: rgba(255, 255, 255, 0.06);
+    border: 1px solid rgba(255, 255, 255, 0.2);
+    border-radius: 2px;
+    color: rgba(255, 255, 255, 0.85);
+    font-family: 'Space Grotesk', -apple-system, BlinkMacSystemFont, sans-serif;
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: 0.9px;
+    text-transform: uppercase;
+    transition: all 0.15s ease;
+    box-sizing: border-box;
+  }
+
+  .hud-export-btn:hover {
+    background: rgba(51, 229, 255, 0.15);
+    border-color: rgba(51, 229, 255, 0.6);
+    color: #33e5ff;
+    box-shadow: 0 0 10px rgba(51, 229, 255, 0.25);
+  }
+
+  .hud-export-btn:active {
+    transform: scale(0.97);
   }
 
   @keyframes dropdownSlideDown {
