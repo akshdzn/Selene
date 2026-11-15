@@ -2,7 +2,7 @@
   import { onMount, tick } from 'svelte';
   import { Tabs, Combobox } from 'bits-ui';
   import { convertToDirectionalCoords, parseCoordinateInput, calculateOptimalValue } from './ephemeris.js';
-  import { getLandmarkTypes, getLandmarksByType } from './places.js';
+  import { getLandmarkTypes, getLandmarksByType, findLandmarkByCoords } from './places.js';
 
   let {
     selectedCoords = null,
@@ -11,6 +11,14 @@
     lon = 3.6339,
     onCoordinateSelect = null,
     mode = $bindable('single'),
+    compareType = $bindable('sites'),
+    activeSiteSlot = $bindable(1),
+    site1Coords = $bindable(null),
+    site2Coords = $bindable(null),
+    site1Name = '',
+    site2Name = '',
+    onSiteSlotSelect = null,
+    onCompareTypeChange = null,
     lunarPositions = null,
     lunarPositionsS2 = null,
     optimalSample = null
@@ -21,6 +29,7 @@
   let editLatInput = $state('');
   let editLonInput = $state('');
   let hasInputError = $state(false);
+  let selectedLandmark = $state(null);
 
   let selectedType = $state('');
   let typeInputValue = $state('');
@@ -66,29 +75,47 @@
   let lonInputEl = $state(null);
   let hudBoxEl = $state(null);
 
-  // 1. When a coordinate is selected, the above coordinates should ONLY display that coordinate (using selectedCoords).
-  // 2. When no coordinate is selected yet, read latitude and longitude from the mouse cursor location (hoveredCoords).
-  // 3. Before any clicks or mouse hover happen on the CoordsHUD, show lat (26.1322) and lon (3.6339) as the initial value.
+  // 1. In compare sites mode, reflect coordinates of the active site slot (Slot 1 or Slot 2).
+  // 2. In single mode: when a coordinate is selected, show that coordinate (selectedCoords).
+  // 3. When no coordinate is selected yet, read latitude and longitude from the mouse cursor location (hoveredCoords).
+  // 4. Default baseline: lat (26.1322) and lon (3.6339).
   let currentLatNum = $derived.by(() => {
+    if (mode === 'compare' && compareType === 'sites') {
+      const activeSlotCoords = activeSiteSlot === 1 ? site1Coords : site2Coords;
+      if (activeSlotCoords && typeof activeSlotCoords.lat === 'number') return activeSlotCoords.lat;
+    }
     if (selectedCoords && typeof selectedCoords.lat === 'number') return selectedCoords.lat;
     if (hoveredCoords && typeof hoveredCoords.lat === 'number') return hoveredCoords.lat;
     return typeof lat === 'number' ? lat : 26.1322;
   });
 
   let currentLonNum = $derived.by(() => {
+    if (mode === 'compare' && compareType === 'sites') {
+      const activeSlotCoords = activeSiteSlot === 1 ? site1Coords : site2Coords;
+      if (activeSlotCoords && typeof activeSlotCoords.lon === 'number') return activeSlotCoords.lon;
+    }
     if (selectedCoords && typeof selectedCoords.lon === 'number') return selectedCoords.lon;
     if (hoveredCoords && typeof hoveredCoords.lon === 'number') return hoveredCoords.lon;
     return typeof lon === 'number' ? lon : 3.6339;
   });
 
   let displayCoords = $derived.by(() => {
-    if (selectedCoords && typeof selectedCoords.lat === 'number' && typeof selectedCoords.lon === 'number') {
-      return convertToDirectionalCoords(selectedCoords.lat, selectedCoords.lon, { precision: 3, space: ' ' });
+    return convertToDirectionalCoords(currentLatNum, currentLonNum, { precision: 3, space: ' ' });
+  });
+
+  let activeSelectedLandmark = $derived.by(() => {
+    if (mode === 'compare' && compareType === 'sites') {
+      const activeCoords = activeSiteSlot === 1 ? site1Coords : site2Coords;
+      if (activeCoords?.name) {
+        return { name: activeCoords.name, lat: activeCoords.lat, lon: activeCoords.lon };
+      }
+      return findLandmarkByCoords(currentLatNum, currentLonNum);
     }
-    if (hoveredCoords && typeof hoveredCoords.lat === 'number' && typeof hoveredCoords.lon === 'number') {
-      return convertToDirectionalCoords(hoveredCoords.lat, hoveredCoords.lon, { precision: 3, space: ' ' });
+    if (selectedLandmark) return selectedLandmark;
+    if (selectedCoords?.name) {
+      return { name: selectedCoords.name, lat: selectedCoords.lat, lon: selectedCoords.lon };
     }
-    return convertToDirectionalCoords(lat ?? 26.1322, lon ?? 3.6339, { precision: 3, space: ' ' });
+    return findLandmarkByCoords(currentLatNum, currentLonNum);
   });
 
   async function startEditing(targetField = 'lat') {
@@ -134,7 +161,32 @@
 
     hasInputError = false;
     isEditing = false;
-    onCoordinateSelect?.({ lat: parsedLat, lon: parsedLon });
+    const recognized = findLandmarkByCoords(parsedLat, parsedLon);
+    selectedLandmark = recognized || { name: 'Custom Site', lat: parsedLat, lon: parsedLon };
+    if (mode === 'compare' && compareType === 'sites') {
+      if (activeSiteSlot === 1) {
+        site1Coords = { lat: parsedLat, lon: parsedLon, name: recognized?.name || 'Site 1' };
+      } else {
+        site2Coords = { lat: parsedLat, lon: parsedLon, name: recognized?.name || 'Site 2' };
+      }
+      onCoordinateSelect?.({
+        lat: parsedLat,
+        lon: parsedLon,
+        name: recognized?.name || null,
+        slot: activeSiteSlot,
+        flyTo: true
+      });
+    } else {
+      if (site1Coords) {
+        site1Coords = { lat: parsedLat, lon: parsedLon, name: recognized?.name || 'Custom Site' };
+      }
+      onCoordinateSelect?.({
+        lat: parsedLat,
+        lon: parsedLon,
+        name: recognized?.name || null,
+        flyTo: true
+      });
+    }
   }
 
   function cancelEditing() {
@@ -169,12 +221,36 @@
   }
 
   function isLandmarkActive(landmark) {
+    if (activeSelectedLandmark?.name && activeSelectedLandmark.name === landmark.name) return true;
+    if (selectedLandmark?.name && selectedLandmark.name === landmark.name) return true;
     const targetLat = landmark.latitude ?? landmark.lat;
     const targetLon = landmark.longitude ?? landmark.lon;
     if (typeof targetLat !== 'number' || typeof targetLon !== 'number') return false;
     return (
-      Math.abs(currentLatNum - targetLat) < 0.005 &&
-      Math.abs(currentLonNum - targetLon) < 0.005
+      Math.abs(currentLatNum - targetLat) < 0.05 &&
+      Math.abs(currentLonNum - targetLon) < 0.05
+    );
+  }
+
+  function isLandmarkSite1(landmark) {
+    if (site1Coords?.name && site1Coords.name === landmark.name) return true;
+    const targetLat = landmark.latitude ?? landmark.lat;
+    const targetLon = landmark.longitude ?? landmark.lon;
+    if (!site1Coords || typeof targetLat !== 'number' || typeof targetLon !== 'number') return false;
+    return (
+      Math.abs(site1Coords.lat - targetLat) < 0.05 &&
+      Math.abs(site1Coords.lon - targetLon) < 0.05
+    );
+  }
+
+  function isLandmarkSite2(landmark) {
+    if (site2Coords?.name && site2Coords.name === landmark.name) return true;
+    const targetLat = landmark.latitude ?? landmark.lat;
+    const targetLon = landmark.longitude ?? landmark.lon;
+    if (!site2Coords || typeof targetLat !== 'number' || typeof targetLon !== 'number') return false;
+    return (
+      Math.abs(site2Coords.lat - targetLat) < 0.05 &&
+      Math.abs(site2Coords.lon - targetLon) < 0.05
     );
   }
 
@@ -182,7 +258,31 @@
     const targetLat = landmark.latitude ?? landmark.lat;
     const targetLon = landmark.longitude ?? landmark.lon;
     if (typeof targetLat === 'number' && typeof targetLon === 'number') {
-      onCoordinateSelect?.({ lat: targetLat, lon: targetLon, flyTo: true });
+      selectedLandmark = landmark;
+      if (mode === 'compare' && compareType === 'sites') {
+        if (activeSiteSlot === 1) {
+          site1Coords = { lat: targetLat, lon: targetLon, name: landmark.name };
+        } else {
+          site2Coords = { lat: targetLat, lon: targetLon, name: landmark.name };
+        }
+        onCoordinateSelect?.({
+          lat: targetLat,
+          lon: targetLon,
+          name: landmark.name,
+          flyTo: true,
+          slot: activeSiteSlot
+        });
+      } else {
+        if (site1Coords) {
+          site1Coords = { lat: targetLat, lon: targetLon, name: landmark.name };
+        }
+        onCoordinateSelect?.({
+          lat: targetLat,
+          lon: targetLon,
+          name: landmark.name,
+          flyTo: true
+        });
+      }
     }
   }
 
@@ -191,6 +291,26 @@
     const targetLon = landmark.longitude ?? landmark.lon;
     const formatted = convertToDirectionalCoords(targetLat, targetLon, { precision: 3, space: ' ' });
     return `${formatted.latStr}, ${formatted.lonStr}`;
+  }
+
+  function formatSiteCoords(coords) {
+    if (!coords || typeof coords.lat !== 'number' || typeof coords.lon !== 'number') return '---';
+    const formatted = convertToDirectionalCoords(coords.lat, coords.lon, { precision: 3, space: ' ' });
+    return `${formatted.latStr}, ${formatted.lonStr}`;
+  }
+
+  function handleSubTabChange(type) {
+    compareType = type;
+    onCompareTypeChange?.(type);
+  }
+
+  function handleSelectSlot(slot) {
+    activeSiteSlot = slot;
+    const targetCoords = slot === 1 ? site1Coords : site2Coords;
+    if (targetCoords) {
+      selectedLandmark = targetCoords.name ? { name: targetCoords.name, lat: targetCoords.lat, lon: targetCoords.lon } : null;
+    }
+    onSiteSlotSelect?.(slot);
   }
 
   onMount(() => {
@@ -319,7 +439,15 @@
   <div class="lunar-hud-labels">
     <!-- Latitude Label (node 47:3) -->
     <span class="hud-label hud-label-lat" data-node-id="47:3">
-      {isEditing ? 'LAT (-90°..90°)' : 'LATITUDE'}
+      {#if isEditing}
+        LAT (-90°..90°)
+      {:else if mode === 'compare' && compareType === 'sites'}
+        SITE {activeSiteSlot} ({activeSiteSlot === 1 ? (site1Name || 'SITE 1') : (site2Name || 'SITE 2')}) · LAT
+      {:else if activeSelectedLandmark?.name}
+        {activeSelectedLandmark.name.toUpperCase()} · LAT
+      {:else}
+        LATITUDE
+      {/if}
     </span>
 
     <!-- Arrow Button (node 49:6) -->
@@ -351,11 +479,19 @@
 
     <!-- Longitudinal Label (node 47:4) -->
     <span class="hud-label hud-label-lon" data-node-id="47:4">
-      {isEditing ? 'LON (-180°..180°)' : 'LONGITUDINAL'}
+      {#if isEditing}
+        LON (-180°..180°)
+      {:else if mode === 'compare' && compareType === 'sites'}
+        SITE {activeSiteSlot} ({activeSiteSlot === 1 ? (site1Name || 'SITE 1') : (site2Name || 'SITE 2')}) · LON
+      {:else if activeSelectedLandmark?.name}
+        {activeSelectedLandmark.name.toUpperCase()} · LON
+      {:else}
+        LONGITUDINAL
+      {/if}
     </span>
   </div>
 
-  <!-- Blank Popdown Menu with Full-Width Bits UI Tabs (Single & Compare) -->
+  <!-- Telemetry Dropdown with Single and Compare Tabs -->
   {#if isDropdownOpen}
     <div
       class="telemetry-dropdown"
@@ -372,204 +508,355 @@
           </Tabs.Trigger>
         </Tabs.List>
 
-        <Tabs.Content value="single" class="tab-content">
-          <div class="combobox-section">
-            <span class="combobox-label">LANDMARK CATEGORY</span>
-            <Combobox.Root
-              type="single"
-              bind:value={selectedType}
-              bind:inputValue={typeInputValue}
-              items={landmarkTypes}
-              onValueChange={(val) => {
-                selectedType = val ?? '';
-              }}
+        <!-- Duplicated Buttons Below When Compare is Selected: Sites and Timelines -->
+        {#if mode === 'compare'}
+          <div class="tabs-list sub-tabs-list" role="tablist" aria-label="Compare sub modes">
+            <button
+              type="button"
+              class="tab-trigger sub-tab-trigger"
+              class:is-active={compareType === 'sites'}
+              data-state={compareType === 'sites' ? 'active' : 'inactive'}
+              onclick={() => handleSubTabChange('sites')}
             >
-              <div class="combobox-input-row">
-                <Combobox.Input
-                  class="combobox-search-input"
-                  placeholder="Select landmark type..."
-                  aria-label="Select landmark type"
-                />
-                {#if selectedType}
-                  <button
-                    type="button"
-                    class="combobox-action-btn combobox-clear-btn"
-                    onclick={(e) => {
-                      e.stopPropagation();
-                      selectedType = '';
-                      typeInputValue = '';
-                    }}
-                    title="Clear selection"
-                    aria-label="Clear selection"
-                  >
-                    ✕
-                  </button>
-                {/if}
-                <Combobox.Trigger
-                  class="combobox-action-btn combobox-trigger-btn"
-                  aria-label="Toggle landmark types dropdown"
-                >
-                  <svg
-                    class="combobox-chevron"
-                    width="14"
-                    height="14"
-                    viewBox="0 0 24 24"
-                    fill="none"
-                    stroke="currentColor"
-                    stroke-width="2.2"
-                  >
-                    <polyline points="6 9 12 15 18 9"></polyline>
-                  </svg>
-                </Combobox.Trigger>
-              </div>
-
-              <Combobox.Portal>
-                <Combobox.Content
-                  class="combobox-content-portal"
-                  side="bottom"
-                  sideOffset={6}
-                  align="start"
-                >
-                  <Combobox.Viewport class="combobox-viewport">
-                    {#each filteredTypeOptions as opt (opt.value)}
-                      <Combobox.Item
-                        value={opt.value}
-                        label={opt.label}
-                        class="combobox-item-option"
-                      >
-                        <span class="option-label">{opt.label}</span>
-                        <span class="option-badge">[{opt.count}]</span>
-                      </Combobox.Item>
-                    {/each}
-                    {#if filteredTypeOptions.length === 0}
-                      <div class="combobox-empty-row">No matching types found</div>
-                    {/if}
-                  </Combobox.Viewport>
-                </Combobox.Content>
-              </Combobox.Portal>
-            </Combobox.Root>
+              Sites
+            </button>
+            <button
+              type="button"
+              class="tab-trigger sub-tab-trigger"
+              class:is-active={compareType === 'timelines'}
+              data-state={compareType === 'timelines' ? 'active' : 'inactive'}
+              onclick={() => handleSubTabChange('timelines')}
+            >
+              Timelines
+            </button>
           </div>
+        {/if}
 
-          <!-- Landmarks Listed Below Combobox When A Type Is Selected -->
-          {#if selectedType}
-            <div class="landmarks-list-section">
-              <div class="landmarks-list-header">
-                <span class="section-title">{selectedType}</span>
-                <span class="section-count">
-                  {listedLandmarks.length} {listedLandmarks.length === 1 ? 'LOCATION' : 'LOCATIONS'}
-                </span>
+        <!-- Single Tab Content -->
+        <Tabs.Content value="single" class="tab-content">
+          <div class="single-site-section">
+            <div class="selected-site-card">
+              <div class="site-slot-header">
+                <div class="site-slot-tag-wrap">
+                  <span class="slot-active-dot is-active"></span>
+                  <span class="summary-sample-tag s1-tag">SELECTED SITE</span>
+                </div>
+                <span class="slot-targeting-badge">ACTIVE</span>
               </div>
-
-              <div class="landmarks-scroll-container">
-                {#each listedLandmarks as landmark (landmark.name)}
-                  {@const isActive = isLandmarkActive(landmark)}
-                  <button
-                    type="button"
-                    class="landmark-item-row"
-                    class:is-active={isActive}
-                    onclick={() => handleSelectLandmark(landmark)}
-                    title="Click to navigate to {landmark.name} on the Moon"
-                    aria-label="Select landmark {landmark.name}"
-                  >
-                    <div class="landmark-left-col">
-                      <span class="landmark-dot" class:is-active={isActive}></span>
-                      <div class="landmark-text-block">
-                        <span class="landmark-name-text">{landmark.name}</span>
-                        <span class="landmark-coords-text">
-                          {formatLandmarkCoords(landmark)}
-                        </span>
-                      </div>
-                    </div>
-
-                    <div class="landmark-right-col">
-                      {#if landmark.diameter_km}
-                        <span class="landmark-metric-badge">Ø {Math.round(landmark.diameter_km)} km</span>
-                      {:else if landmark.country}
-                        <span class="landmark-metric-badge">{landmark.country}</span>
-                      {/if}
-                      {#if isActive}
-                        <span class="landmark-locked-tag">TARGETED</span>
-                      {/if}
-                    </div>
-                  </button>
-                {/each}
+              <div class="site-slot-details">
+                <span class="site-slot-name">{activeSelectedLandmark?.name || site1Name || 'Apollo 15'}</span>
+                <span class="site-slot-coords">{formatSiteCoords({ lat: currentLatNum, lon: currentLonNum })}</span>
               </div>
             </div>
-          {:else}
-            <div class="landmarks-empty-state">
-              <div class="empty-state-icon">
-                <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">
-                  <circle cx="12" cy="12" r="10"></circle>
-                  <circle cx="12" cy="12" r="3"></circle>
-                  <line x1="12" y1="2" x2="12" y2="5"></line>
-                  <line x1="12" y1="19" x2="12" y2="22"></line>
-                  <line x1="2" y1="12" x2="5" y2="12"></line>
-                  <line x1="19" y1="12" x2="22" y2="12"></line>
-                </svg>
-              </div>
-              <span class="empty-state-title">SELECT A LANDMARK TYPE</span>
-              <p class="empty-state-desc">
-                Choose a landmark category from the combobox above to browse Maria, mountain ranges, and historical landing sites.
-              </p>
-            </div>
-          {/if}
+
+            {@render landmarkBrowser(false)}
+          </div>
         </Tabs.Content>
 
+        <!-- Compare Tab Content -->
         <Tabs.Content value="compare" class="tab-content">
-          <div class="compare-hud-section">
-            <div class="compare-hud-header">
-              <span class="compare-hud-title">MISSION WINDOW COMPARISON</span>
-              <span class="compare-hud-badge">COMPARE MODE</span>
+          {#if compareType === 'timelines'}
+            <!-- Timelines Compare Mode -->
+            <div class="compare-hud-section">
+              <div class="compare-hud-header">
+                <span class="compare-hud-title">MISSION WINDOW COMPARISON</span>
+                <span class="compare-hud-badge">TIMELINES</span>
+              </div>
+
+              <div class="compare-samples-grid">
+                <!-- Sample 1 Card -->
+                <div class="compare-sample-summary-card" class:is-optimal={activeOptimalSample === 1}>
+                  <div class="summary-card-header">
+                    <span class="summary-sample-tag s1-tag">SAMPLE 1</span>
+                    {#if activeOptimalSample === 1}
+                      <span class="optimal-sample-badge">OPTIMAL SAMPLE</span>
+                    {/if}
+                  </div>
+                  <div class="summary-metric-row">
+                    <span class="metric-name">OPTIMAL WINDOW</span>
+                    <span class="metric-value">{sample1OptimalValue}h</span>
+                  </div>
+                </div>
+
+                <!-- Sample 2 Card -->
+                <div class="compare-sample-summary-card" class:is-optimal={activeOptimalSample === 2}>
+                  <div class="summary-card-header">
+                    <span class="summary-sample-tag s2-tag">SAMPLE 2</span>
+                    {#if activeOptimalSample === 2}
+                      <span class="optimal-sample-badge">OPTIMAL SAMPLE</span>
+                    {/if}
+                  </div>
+                  <div class="summary-metric-row">
+                    <span class="metric-name">OPTIMAL WINDOW</span>
+                    <span class="metric-value">{sample2OptimalValue}h</span>
+                  </div>
+                </div>
+              </div>
+
+              {#if activeOptimalSample}
+                <div class="optimal-verdict-banner">
+                  <span class="verdict-icon">★</span>
+                  <span class="verdict-text">
+                    SAMPLE {activeOptimalSample} IS OPTIMAL WITH {optimalSampleValue}h OF SIMULTANEOUS POWER & COMMS
+                  </span>
+                </div>
+              {:else}
+                <div class="compare-pending-notice">
+                  <span>Select and calculate date ranges to evaluate optimal sample window.</span>
+                </div>
+              {/if}
             </div>
-
-            <div class="compare-samples-grid">
-              <!-- Sample 1 Card -->
-              <div class="compare-sample-summary-card" class:is-optimal={activeOptimalSample === 1}>
-                <div class="summary-card-header">
-                  <span class="summary-sample-tag s1-tag">SAMPLE 1</span>
-                  {#if activeOptimalSample === 1}
-                    <span class="optimal-sample-badge">OPTIMAL SAMPLE</span>
-                  {/if}
-                </div>
-                <div class="summary-metric-row">
-                  <span class="metric-name">OPTIMAL WINDOW</span>
-                  <span class="metric-value">{sample1OptimalValue}h</span>
-                </div>
+          {:else}
+            <!-- Sites Compare Mode: Same UI as Single Option but two sites can be selected and compared -->
+            <div class="compare-sites-section">
+              <div class="compare-hud-header">
+                <span class="compare-hud-title">LUNAR SITE COMPARISON</span>
+                <span class="compare-hud-badge">SITES</span>
               </div>
 
-              <!-- Sample 2 Card -->
-              <div class="compare-sample-summary-card" class:is-optimal={activeOptimalSample === 2}>
-                <div class="summary-card-header">
-                  <span class="summary-sample-tag s2-tag">SAMPLE 2</span>
-                  {#if activeOptimalSample === 2}
-                    <span class="optimal-sample-badge">OPTIMAL SAMPLE</span>
+              <!-- Two Sites Selection Slot Cards -->
+              <div class="sites-slot-selector">
+                <button
+                  type="button"
+                  class="site-slot-card"
+                  class:is-active-slot={activeSiteSlot === 1}
+                  class:is-optimal={activeOptimalSample === 1}
+                  onclick={() => handleSelectSlot(1)}
+                  aria-label="Select Site 1 slot to target"
+                >
+                  <div class="site-slot-header">
+                    <div class="site-slot-tag-wrap">
+                      <span class="slot-active-dot" class:is-active={activeSiteSlot === 1}></span>
+                      <span class="summary-sample-tag s1-tag">SITE 1</span>
+                      {#if activeOptimalSample === 1}
+                        <span class="optimal-sample-badge">OPTIMAL SAMPLE</span>
+                      {/if}
+                    </div>
+                    {#if activeSiteSlot === 1}
+                      <span class="slot-targeting-badge">TARGETING</span>
+                    {/if}
+                  </div>
+                  <div class="site-slot-details">
+                    <span class="site-slot-name">{site1Name || 'Apollo 15'}</span>
+                    <span class="site-slot-coords">{formatSiteCoords(site1Coords)}</span>
+                  </div>
+                  {#if sample1OptimalValue > 0 || sample2OptimalValue > 0}
+                    <div class="summary-metric-row">
+                      <span class="metric-name">OPTIMAL WINDOW</span>
+                      <span class="metric-value">{sample1OptimalValue}h</span>
+                    </div>
                   {/if}
-                </div>
-                <div class="summary-metric-row">
-                  <span class="metric-name">OPTIMAL WINDOW</span>
-                  <span class="metric-value">{sample2OptimalValue}h</span>
-                </div>
+                </button>
+
+                <button
+                  type="button"
+                  class="site-slot-card"
+                  class:is-active-slot={activeSiteSlot === 2}
+                  class:is-optimal={activeOptimalSample === 2}
+                  onclick={() => handleSelectSlot(2)}
+                  aria-label="Select Site 2 slot to target"
+                >
+                  <div class="site-slot-header">
+                    <div class="site-slot-tag-wrap">
+                      <span class="slot-active-dot" class:is-active={activeSiteSlot === 2}></span>
+                      <span class="summary-sample-tag s2-tag">SITE 2</span>
+                      {#if activeOptimalSample === 2}
+                        <span class="optimal-sample-badge">OPTIMAL SAMPLE</span>
+                      {/if}
+                    </div>
+                    {#if activeSiteSlot === 2}
+                      <span class="slot-targeting-badge">TARGETING</span>
+                    {/if}
+                  </div>
+                  <div class="site-slot-details">
+                    <span class="site-slot-name">{site2Name || 'Apollo 11'}</span>
+                    <span class="site-slot-coords">{formatSiteCoords(site2Coords)}</span>
+                  </div>
+                  {#if sample1OptimalValue > 0 || sample2OptimalValue > 0}
+                    <div class="summary-metric-row">
+                      <span class="metric-name">OPTIMAL WINDOW</span>
+                      <span class="metric-value">{sample2OptimalValue}h</span>
+                    </div>
+                  {/if}
+                </button>
               </div>
+
+              <!-- Landmark Category Combobox and Landmark List (same UI as Single Option) -->
+              {@render landmarkBrowser(true)}
+
+              {#if activeOptimalSample}
+                <div class="optimal-verdict-banner">
+                  <span class="verdict-icon">★</span>
+                  <span class="verdict-text">
+                    SITE {activeOptimalSample} ({activeOptimalSample === 1 ? (site1Name || 'SITE 1') : (site2Name || 'SITE 2')}) IS OPTIMAL WITH {optimalSampleValue}h OF SIMULTANEOUS POWER & COMMS
+                  </span>
+                </div>
+              {/if}
             </div>
-
-            {#if activeOptimalSample}
-              <div class="optimal-verdict-banner">
-                <span class="verdict-icon">★</span>
-                <span class="verdict-text">
-                  SAMPLE {activeOptimalSample} IS OPTIMAL WITH {optimalSampleValue}h OF SIMULTANEOUS POWER & COMMS
-                </span>
-              </div>
-            {:else}
-              <div class="compare-pending-notice">
-                <span>Select and calculate date ranges to evaluate optimal sample window.</span>
-              </div>
-            {/if}
-          </div>
+          {/if}
         </Tabs.Content>
       </Tabs.Root>
     </div>
   {/if}
 </div>
+
+<!-- Reusable Landmark Browser Snippet for Single Option & Sites Compare -->
+{#snippet landmarkBrowser(isSitesCompare = false)}
+  <div class="combobox-section">
+    <span class="combobox-label">LANDMARK CATEGORY</span>
+    <Combobox.Root
+      type="single"
+      bind:value={selectedType}
+      bind:inputValue={typeInputValue}
+      items={landmarkTypes}
+      onValueChange={(val) => {
+        selectedType = val ?? '';
+      }}
+    >
+      <div class="combobox-input-row">
+        <Combobox.Input
+          class="combobox-search-input"
+          placeholder="Select landmark type..."
+          aria-label="Select landmark type"
+        />
+        {#if selectedType}
+          <button
+            type="button"
+            class="combobox-action-btn combobox-clear-btn"
+            onclick={(e) => {
+              e.stopPropagation();
+              selectedType = '';
+              typeInputValue = '';
+            }}
+            title="Clear selection"
+            aria-label="Clear selection"
+          >
+            ✕
+          </button>
+        {/if}
+        <Combobox.Trigger
+          class="combobox-action-btn combobox-trigger-btn"
+          aria-label="Toggle landmark types dropdown"
+        >
+          <svg
+            class="combobox-chevron"
+            width="14"
+            height="14"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            stroke-width="2.2"
+          >
+            <polyline points="6 9 12 15 18 9"></polyline>
+          </svg>
+        </Combobox.Trigger>
+      </div>
+
+      <Combobox.Portal>
+        <Combobox.Content
+          class="combobox-content-portal"
+          side="bottom"
+          sideOffset={6}
+          align="start"
+        >
+          <Combobox.Viewport class="combobox-viewport">
+            {#each filteredTypeOptions as opt (opt.value)}
+              <Combobox.Item
+                value={opt.value}
+                label={opt.label}
+                class="combobox-item-option"
+              >
+                <span class="option-label">{opt.label}</span>
+                <span class="option-badge">[{opt.count}]</span>
+              </Combobox.Item>
+            {/each}
+            {#if filteredTypeOptions.length === 0}
+              <div class="combobox-empty-row">No matching types found</div>
+            {/if}
+          </Combobox.Viewport>
+        </Combobox.Content>
+      </Combobox.Portal>
+    </Combobox.Root>
+  </div>
+
+  <!-- Landmarks Listed Below Combobox When A Type Is Selected -->
+  {#if selectedType}
+    <div class="landmarks-list-section">
+      <div class="landmarks-list-header">
+        <span class="section-title">{selectedType}</span>
+        <span class="section-count">
+          {listedLandmarks.length} {listedLandmarks.length === 1 ? 'LOCATION' : 'LOCATIONS'}
+        </span>
+      </div>
+
+      <div class="landmarks-scroll-container">
+        {#each listedLandmarks as landmark (landmark.name)}
+          {@const isS1 = isSitesCompare && isLandmarkSite1(landmark)}
+          {@const isS2 = isSitesCompare && isLandmarkSite2(landmark)}
+          {@const isSingleActive = !isSitesCompare && isLandmarkActive(landmark)}
+          {@const isActive = isSingleActive || (isSitesCompare && ((activeSiteSlot === 1 && isS1) || (activeSiteSlot === 2 && isS2)))}
+          <button
+            type="button"
+            class="landmark-item-row"
+            class:is-active={isActive}
+            onclick={() => handleSelectLandmark(landmark)}
+            title="Click to navigate to {landmark.name} on the Moon"
+            aria-label="Select landmark {landmark.name}"
+          >
+            <div class="landmark-left-col">
+              <span class="landmark-dot" class:is-active={isActive}></span>
+              <div class="landmark-text-block">
+                <span class="landmark-name-text">{landmark.name}</span>
+                <span class="landmark-coords-text">
+                  {formatLandmarkCoords(landmark)}
+                </span>
+              </div>
+            </div>
+
+            <div class="landmark-right-col">
+              {#if landmark.diameter_km}
+                <span class="landmark-metric-badge">Ø {Math.round(landmark.diameter_km)} km</span>
+              {:else if landmark.country}
+                <span class="landmark-metric-badge">{landmark.country}</span>
+              {/if}
+
+              {#if isSitesCompare}
+                {#if isS1}
+                  <span class="landmark-slot-tag s1-tag">SITE 1</span>
+                {/if}
+                {#if isS2}
+                  <span class="landmark-slot-tag s2-tag">SITE 2</span>
+                {/if}
+                {#if isActive}
+                  <span class="landmark-locked-tag">TARGETED</span>
+                {/if}
+              {:else if isActive}
+                <span class="landmark-locked-tag">TARGETED</span>
+              {/if}
+            </div>
+          </button>
+        {/each}
+      </div>
+    </div>
+  {:else}
+    <div class="landmarks-empty-state">
+      <div class="empty-state-icon">
+        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">
+          <circle cx="12" cy="12" r="10"></circle>
+          <circle cx="12" cy="12" r="3"></circle>
+          <line x1="12" y1="2" x2="12" y2="5"></line>
+          <line x1="12" y1="19" x2="12" y2="22"></line>
+          <line x1="2" y1="12" x2="5" y2="12"></line>
+          <line x1="19" y1="12" x2="22" y2="12"></line>
+        </svg>
+      </div>
+      <span class="empty-state-title">SELECT A LANDMARK TYPE</span>
+      <p class="empty-state-desc">
+        Choose a landmark category from the combobox above to browse Maria, mountain ranges, and historical landing sites.
+      </p>
+    </div>
+  {/if}
+{/snippet}
 
 <style>
   /* ---------------- HUD Layout ---------------- */
@@ -898,6 +1185,50 @@
     color: white;
     font-weight: 700;
     /*box-shadow: 0 0 12px rgba(255, 149, 0, 0.35);*/
+  }
+
+  :global(.sub-tabs-list) {
+    width: 100%;
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    background: rgba(255, 255, 255, 0.04);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    border-radius: 2px;
+    box-sizing: border-box;
+    padding: 2px;
+    gap: 4px;
+    margin-top: 2px;
+  }
+
+  :global(.sub-tab-trigger) {
+    all: unset;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    height: 30px;
+    font-family: 'Space Grotesk', -apple-system, BlinkMacSystemFont, sans-serif;
+    font-size: 13px;
+    font-weight: 600;
+    letter-spacing: 0.8px;
+    color: rgba(255, 255, 255, 0.6);
+    background: transparent;
+    border-radius: 2px;
+    cursor: pointer;
+    box-sizing: border-box;
+    transition: all 0.15s ease;
+    user-select: none;
+  }
+
+  :global(.sub-tab-trigger:hover:not([data-state="active"])) {
+    color: #ffffff;
+    background: rgba(255, 255, 255, 0.08);
+  }
+
+  :global(.sub-tab-trigger[data-state="active"]) {
+    background: rgba(255, 255, 255, 0.22);
+    color: #ffffff;
+    font-weight: 700;
+    box-shadow: 0 1px 4px rgba(0, 0, 0, 0.3);
   }
 
   :global(.tab-content) {
@@ -1400,6 +1731,162 @@
     font-family: 'Space Grotesk', sans-serif;
     font-size: 12px;
     color: rgba(255, 255, 255, 0.5);
+  }
+
+  /* Single Mode Styles */
+  .single-site-section {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    width: 100%;
+  }
+
+  .selected-site-card {
+    background: rgba(255, 255, 255, 0.05);
+    border: 1px solid rgba(51, 229, 255, 0.6);
+    border-radius: 3px;
+    padding: 8px 10px;
+    display: flex;
+    flex-direction: column;
+    gap: 5px;
+    box-sizing: border-box;
+    box-shadow: 0 0 10px rgba(51, 229, 255, 0.15), inset 0 0 6px rgba(51, 229, 255, 0.05);
+  }
+
+  /* Sites Compare Mode Styles */
+  .compare-sites-section {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    width: 100%;
+  }
+
+  .sites-slot-selector {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 8px;
+    width: 100%;
+    box-sizing: border-box;
+  }
+
+  .site-slot-card {
+    all: unset;
+    background: rgba(255, 255, 255, 0.05);
+    border: 1px solid rgba(255, 255, 255, 0.12);
+    border-radius: 3px;
+    padding: 8px 10px;
+    display: flex;
+    flex-direction: column;
+    gap: 5px;
+    box-sizing: border-box;
+    cursor: pointer;
+    transition: all 0.15s ease;
+  }
+
+  .site-slot-card:hover {
+    background: rgba(255, 255, 255, 0.09);
+    border-color: rgba(255, 255, 255, 0.25);
+  }
+
+  .site-slot-card.is-active-slot {
+    border-color: rgba(51, 229, 255, 0.7);
+    background: rgba(51, 229, 255, 0.08);
+    box-shadow: 0 0 10px rgba(51, 229, 255, 0.2), inset 0 0 6px rgba(51, 229, 255, 0.06);
+  }
+
+  .site-slot-card.is-optimal {
+    border-color: rgba(74, 222, 128, 0.6);
+    background: rgba(74, 222, 128, 0.08);
+    box-shadow: 0 0 10px rgba(74, 222, 128, 0.18);
+  }
+
+  .site-slot-card.is-active-slot.is-optimal {
+    border-color: rgba(74, 222, 128, 0.85);
+    background: rgba(74, 222, 128, 0.12);
+    box-shadow: 0 0 14px rgba(74, 222, 128, 0.25);
+  }
+
+  .site-slot-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 4px;
+    flex-wrap: wrap;
+  }
+
+  .site-slot-tag-wrap {
+    display: flex;
+    align-items: center;
+    gap: 5px;
+  }
+
+  .slot-active-dot {
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    background: rgba(255, 255, 255, 0.3);
+    transition: all 0.15s ease;
+  }
+
+  .slot-active-dot.is-active {
+    background: #33e5ff;
+    box-shadow: 0 0 6px #33e5ff;
+  }
+
+  .slot-targeting-badge {
+    font-family: 'Jersey 25', sans-serif;
+    font-size: 11px;
+    color: #33e5ff;
+    letter-spacing: 0.8px;
+    background: rgba(51, 229, 255, 0.15);
+    border: 1px solid rgba(51, 229, 255, 0.4);
+    border-radius: 2px;
+    padding: 0 4px;
+  }
+
+  .site-slot-details {
+    display: flex;
+    flex-direction: column;
+    gap: 1px;
+  }
+
+  .site-slot-name {
+    font-family: 'Space Grotesk', -apple-system, BlinkMacSystemFont, sans-serif;
+    font-size: 13px;
+    font-weight: 600;
+    color: #ffffff;
+    letter-spacing: 0.3px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  .site-slot-coords {
+    font-family: 'Space Grotesk', -apple-system, BlinkMacSystemFont, sans-serif;
+    font-size: 11px;
+    color: rgba(255, 255, 255, 0.6);
+    letter-spacing: 0.2px;
+    white-space: nowrap;
+  }
+
+  .landmark-slot-tag {
+    font-family: 'Jersey 25', sans-serif;
+    font-size: 11px;
+    letter-spacing: 0.8px;
+    padding: 1px 4px;
+    border-radius: 2px;
+  }
+
+  .landmark-slot-tag.s1-tag {
+    background: rgba(255, 149, 0, 0.2);
+    color: #ffaa55;
+    border: 1px solid rgba(255, 149, 0, 0.4);
+  }
+
+  .landmark-slot-tag.s2-tag {
+    background: rgba(0, 178, 255, 0.2);
+    color: #33e5ff;
+    border: 1px solid rgba(0, 178, 255, 0.4);
   }
 
   @keyframes dropdownSlideDown {

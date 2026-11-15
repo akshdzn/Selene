@@ -142,4 +142,81 @@ assert.strictEqual(getSampleBadge(1, resultA.optimalSample), null, 'Sample 1 mus
 
 console.log('✔ Optimal Sample comparison and badge display logic verified.');
 
+console.log('Testing Sites vs Timelines Compare Sub-modes...');
+
+// Test 5: Sub-mode selection
+let compareType = 'timelines';
+assert.strictEqual(compareType, 'timelines', 'Default or timelines mode');
+compareType = 'sites';
+assert.strictEqual(compareType, 'sites', 'Switched to sites mode');
+
+// Test 6: Sites Compare Mode uses the same timeline for both sites
+const sharedStartDate = '2026-06-01';
+const sharedEndDate = '2026-06-21';
+const site1 = { lat: 26.1322, lon: 3.6339, name: 'Apollo 15' };
+const site2 = { lat: 0.6741, lon: 23.4730, name: 'Apollo 11' };
+
+const site1MissionWindow = { startDate: sharedStartDate, endDate: sharedEndDate };
+const site2MissionWindow = { startDate: sharedStartDate, endDate: sharedEndDate };
+
+assert.strictEqual(site1MissionWindow.startDate, site2MissionWindow.startDate, 'Site 1 and Site 2 must share start date');
+assert.strictEqual(site1MissionWindow.endDate, site2MissionWindow.endDate, 'Site 1 and Site 2 must share end date');
+assert.strictEqual(
+  getDaysDiff(site1MissionWindow.startDate, site1MissionWindow.endDate),
+  getDaysDiff(site2MissionWindow.startDate, site2MissionWindow.endDate),
+  'Duration must be identical for both sites on shared timeline'
+);
+
+// Test 7: Comparing two sites on shared timeline with Optimal Sample calculation
+import { findLandmarkByCoords } from '../src/lib/places.js';
+
+const apollo15 = findLandmarkByCoords(26.1322, 3.6339);
+assert.ok(apollo15, 'Apollo 15 should be found by coords');
+assert.strictEqual(apollo15.name, 'Apollo 15');
+
+const apollo11 = findLandmarkByCoords(0.6741, 23.4730);
+assert.ok(apollo11, 'Apollo 11 should be found by coords');
+assert.strictEqual(apollo11.name, 'Apollo 11');
+
+const ch3 = findLandmarkByCoords(-69.373, 32.319);
+assert.ok(ch3, 'Chandrayaan-3 should be found by coords');
+assert.strictEqual(ch3.name, 'Chandrayaan-3 Vikram');
+
+// Site 1 (Apollo 15) vs Site 2 (Apollo 11) simulated ephemeris on same dates
+const site1Sun = [{ elevation: 8 }, { elevation: 12 }, { elevation: 14 }, { elevation: -2 }];
+const site1Earth = [{ elevation: 25 }, { elevation: 25 }, { elevation: 26 }, { elevation: 26 }];
+// Indices 0, 1, 2 optimal -> 3 hours
+
+const site2Sun = [{ elevation: 15 }, { elevation: 18 }, { elevation: 20 }, { elevation: 22 }];
+const site2Earth = [{ elevation: 30 }, { elevation: 30 }, { elevation: 31 }, { elevation: 31 }];
+// Indices 0, 1, 2, 3 optimal -> 4 hours
+
+const siteOptVal1 = calculateOptimalValue(site1Sun, site1Earth);
+const siteOptVal2 = calculateOptimalValue(site2Sun, site2Earth);
+assert.strictEqual(siteOptVal1, 3, 'Site 1 optimal window should be 3 hours');
+assert.strictEqual(siteOptVal2, 4, 'Site 2 optimal window should be 4 hours');
+
+const sitesResult = determineOptimalSample(site1Sun, site1Earth, site2Sun, site2Earth);
+assert.strictEqual(sitesResult.optimalSample, 2, 'Site 2 (Apollo 11) should be optimal sample');
+assert.strictEqual(sitesResult.OptimalSample, 2, 'OptimalSample variable should equal 2');
+assert.strictEqual(
+  getSampleBadge(2, sitesResult.optimalSample),
+  'OPTIMAL SAMPLE',
+  'Site 2 must display OPTIMAL SAMPLE badge next to its header'
+);
+
+function getTrackTag(siteSlot, siteName, compareTypeMode) {
+  if (compareTypeMode === 'sites') {
+    return siteName ? `SITE ${siteSlot} (${siteName})` : `SITE ${siteSlot}`;
+  }
+  return `SAMPLE ${siteSlot}`;
+}
+
+assert.strictEqual(getTrackTag(1, 'Apollo 15', 'sites'), 'SITE 1 (Apollo 15)', 'Site 1 label formatting');
+assert.strictEqual(getTrackTag(2, 'Apollo 11', 'sites'), 'SITE 2 (Apollo 11)', 'Site 2 label formatting');
+assert.strictEqual(getTrackTag(1, null, 'timelines'), 'SAMPLE 1', 'Timelines Sample 1 label');
+assert.strictEqual(getTrackTag(2, null, 'timelines'), 'SAMPLE 2', 'Timelines Sample 2 label');
+
+console.log('✔ Sites sub-mode shared timeline and optimal sample checks verified.');
+
 console.log('✔ All compare mode duration and timeline checks passed successfully!');

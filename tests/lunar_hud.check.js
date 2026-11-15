@@ -122,7 +122,7 @@ function handleSelectLandmark(landmark, callback) {
   const targetLat = landmark.latitude ?? landmark.lat;
   const targetLon = landmark.longitude ?? landmark.lon;
   if (typeof targetLat === 'number' && typeof targetLon === 'number') {
-    callback?.({ lat: targetLat, lon: targetLon, flyTo: true });
+    callback?.({ lat: targetLat, lon: targetLon, name: landmark.name, flyTo: true });
   }
 }
 
@@ -130,18 +130,21 @@ handleSelectLandmark(sampleLandmark, mockCoordinateSelect);
 assert(selectedResult, 'Selection payload must be generated');
 assert.strictEqual(selectedResult.lat, 8.35, 'Latitude must match landmark');
 assert.strictEqual(selectedResult.lon, 30.83, 'Longitude must match landmark');
+assert.strictEqual(selectedResult.name, 'Mare Tranquillitatis', 'Name must match landmark');
 assert.strictEqual(selectedResult.flyTo, true, 'flyTo flag must be true to automatically move camera to landmark');
 
-// Active state detection
-function isLandmarkActive(landmark, currentLat, currentLon) {
+// Active state detection (matches by name or coordinates)
+function isLandmarkActive(landmark, currentLat, currentLon, activeLandmark = null) {
+  if (activeLandmark?.name && activeLandmark.name === landmark.name) return true;
   const targetLat = landmark.latitude ?? landmark.lat;
   const targetLon = landmark.longitude ?? landmark.lon;
   if (typeof targetLat !== 'number' || typeof targetLon !== 'number') return false;
-  return Math.abs(currentLat - targetLat) < 0.005 && Math.abs(currentLon - targetLon) < 0.005;
+  return Math.abs(currentLat - targetLat) < 0.05 && Math.abs(currentLon - targetLon) < 0.05;
 }
 
 assert.strictEqual(isLandmarkActive(sampleLandmark, 8.35, 30.83), true, 'Landmark should be marked active when coords match');
-assert.strictEqual(isLandmarkActive(sampleLandmark, 26.132, 3.634), false, 'Landmark should not be active when coords differ');
+assert.strictEqual(isLandmarkActive(sampleLandmark, 0, 0, sampleLandmark), true, 'Landmark should be marked active when name matches');
+assert.strictEqual(isLandmarkActive(sampleLandmark, 26.132, 3.634, null), false, 'Landmark should not be active when coords and name differ');
 console.log('✔ Verified landmark selection event and active state detection.');
 
 console.log('\nALL LUNAR COORDS HUD LOGIC CHECKS PASSED SUCCESSFULLY!');

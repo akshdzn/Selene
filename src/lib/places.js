@@ -421,4 +421,36 @@ export function getLandmarksByType(type, locations = placesData.locations) {
 	return locations.filter((loc) => loc.type === type);
 }
 
+/**
+ * Finds a landmark or landing site near the provided coordinates.
+ *
+ * @param {number} lat Latitude
+ * @param {number} lon Longitude
+ * @param {number} epsilon Max angular distance in degrees to match
+ * @returns {object|null} Matching landmark or null
+ */
+export function findLandmarkByCoords(lat, lon, epsilon = 0.05) {
+	if (typeof lat !== 'number' || typeof lon !== 'number') return null;
+	const landingSites = getHistoricLandingSites(moonLandingSitesData);
+	for (const site of landingSites) {
+		const sLat = site.latitude ?? site.lat;
+		const sLon = site.longitude ?? site.lon;
+		if (typeof sLat === 'number' && typeof sLon === 'number') {
+			if (Math.abs(sLat - lat) < epsilon && Math.abs(sLon - lon) < epsilon) {
+				return site;
+			}
+		}
+	}
+	for (const loc of placesData.locations) {
+		const lLat = loc.latitude ?? loc.lat;
+		const lLon = loc.longitude ?? loc.lon;
+		if (typeof lLat === 'number' && typeof lLon === 'number') {
+			if (Math.abs(lLat - lat) < epsilon && Math.abs(lLon - lon) < epsilon) {
+				return loc;
+			}
+		}
+	}
+	return null;
+}
+
 export { placesData, moonLandingSitesData };

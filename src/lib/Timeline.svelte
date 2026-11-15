@@ -8,6 +8,9 @@
     lunarPositions = null,
     lunarPositionsS2 = null,
     mode = 'single',
+    compareType = 'timelines',
+    site1Name = '',
+    site2Name = '',
     onTimeChange = null,
     hoveredCoords = null,
     showSubmit = false,
@@ -681,11 +684,13 @@
       style="width: {timelineScale * 100}%;"
     >
       {#if mode === 'compare'}
-        <!-- UPPER TIMELINE: SAMPLE 2 -->
+        <!-- UPPER TIMELINE: SAMPLE 2 / SITE 2 -->
         <div class="timeline-track-block s2-block">
           <div class="track-block-header">
             <div class="track-tag-wrap">
-              <span class="track-tag s2-tag">SAMPLE 2</span>
+              <span class="track-tag s2-tag">
+                {compareType === 'sites' ? (site2Name ? `SITE 2 (${site2Name})` : 'SITE 2') : 'SAMPLE 2'}
+              </span>
               {#if activeOptimalSample === 2}
                 <span class="optimal-sample-badge">OPTIMAL SAMPLE</span>
               {/if}
@@ -697,7 +702,7 @@
             class="timeline-track"
             tabindex="0"
             role="slider"
-            aria-label="Mission Timeline - Sample 2"
+            aria-label={compareType === 'sites' ? 'Mission Timeline - Site 2' : 'Mission Timeline - Sample 2'}
             aria-valuemin="0"
             aria-valuemax={totalSteps - 1}
             aria-valuenow={currentPlayheadIndex}
@@ -712,11 +717,13 @@
           </div>
         </div>
 
-        <!-- LOWER TIMELINE: SAMPLE 1 -->
+        <!-- LOWER TIMELINE: SAMPLE 1 / SITE 1 -->
         <div class="timeline-track-block s1-block">
           <div class="track-block-header">
             <div class="track-tag-wrap">
-              <span class="track-tag s1-tag">SAMPLE 1</span>
+              <span class="track-tag s1-tag">
+                {compareType === 'sites' ? (site1Name ? `SITE 1 (${site1Name})` : 'SITE 1') : 'SAMPLE 1'}
+              </span>
               {#if activeOptimalSample === 1}
                 <span class="optimal-sample-badge">OPTIMAL SAMPLE</span>
               {/if}
@@ -729,7 +736,7 @@
             bind:this={trackElement}
             tabindex="0"
             role="slider"
-            aria-label="Mission Timeline - Sample 1"
+            aria-label={compareType === 'sites' ? 'Mission Timeline - Site 1' : 'Mission Timeline - Sample 1'}
             aria-valuemin="0"
             aria-valuemax={totalSteps - 1}
             aria-valuenow={currentPlayheadIndex}

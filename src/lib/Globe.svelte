@@ -14,7 +14,8 @@
 		createPlaceMarkers,
 		checkPlaceHover,
 		updatePlaceMarkersAnimation,
-		getHistoricLandingSites
+		getHistoricLandingSites,
+		findLandmarkByCoords
 	} from './places.js';
 
 	let {
@@ -1105,7 +1106,7 @@
 		}
 
 		function onClick(e) {
-			if (isCalculating || !container) return;
+			if (!container) return;
 			// Only select if not dragging camera
 			const dist = Math.hypot(e.clientX - pointerDownPos.x, e.clientY - pointerDownPos.y);
 			if (dist > 5) return;
@@ -1119,7 +1120,7 @@
 			if (placeHit) {
 				e.preventDefault();
 				e.stopPropagation();
-				onCoordinateSelect?.({ lat: placeHit.latitude, lon: placeHit.longitude, flyTo: true });
+				onCoordinateSelect?.({ lat: placeHit.latitude, lon: placeHit.longitude, name: placeHit.name, flyTo: true });
 				return;
 			}
 
@@ -1130,12 +1131,13 @@
 				const hitPoint = intersects[0].point;
 				const norm = hitPoint.clone().normalize();
 				const { lat, lon } = vector3ToLatLon(norm);
-				onCoordinateSelect?.({ lat, lon });
+				const recognized = findLandmarkByCoords(lat, lon);
+				onCoordinateSelect?.({ lat, lon, name: recognized?.name || null });
 			}
 		}
 
 		function onDoubleClick(e) {
-			if (isCalculating || !container) return;
+			if (!container) return;
 			const rect = container.getBoundingClientRect();
 			mouse.x = ((e.clientX - rect.left) / rect.width) * 2 - 1;
 			mouse.y = -((e.clientY - rect.top) / rect.height) * 2 + 1;
@@ -1146,7 +1148,7 @@
 			if (placeHit) {
 				e.preventDefault();
 				e.stopPropagation();
-				onCoordinateSelect?.({ lat: placeHit.latitude, lon: placeHit.longitude, flyTo: true });
+				onCoordinateSelect?.({ lat: placeHit.latitude, lon: placeHit.longitude, name: placeHit.name, flyTo: true });
 				return;
 			}
 
@@ -1157,7 +1159,8 @@
 				const hitPoint = intersects[0].point;
 				const norm = hitPoint.clone().normalize();
 				const { lat, lon } = vector3ToLatLon(norm);
-				onCoordinateSelect?.({ lat, lon });
+				const recognized = findLandmarkByCoords(lat, lon);
+				onCoordinateSelect?.({ lat, lon, name: recognized?.name || null });
 			}
 		}
 

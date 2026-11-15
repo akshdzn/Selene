@@ -6,11 +6,21 @@
   import DatePicker from './lib/DatePicker.svelte';
   import LunarCoordsHUD from './lib/LunarCoordsHUD.svelte';
   import { fetchCurrentLunarPositions, calculateOptimalValue } from './lib/ephemeris.js';
+  import { findLandmarkByCoords } from './lib/places.js';
 
   let showLanding = $state(true);
   let showGlobe = $state(false);
   let landingOpacity = $state(1);
   let mode = $state('single');
+  let compareType = $state('sites');
+  let activeSiteSlot = $state(1);
+
+  // Default sites: Apollo 15 (Site 1) and Apollo 11 (Site 2)
+  let site1Coords = $state({ lat: 26.1322, lon: 3.6339, name: 'Apollo 15' });
+  let site2Coords = $state({ lat: 0.6741, lon: 23.4730, name: 'Apollo 11' });
+
+  let site1DisplayName = $derived(site1Coords?.name || 'Apollo 15');
+  let site2DisplayName = $derived(site2Coords?.name || 'Apollo 11');
 
   // Apollo 15 landing site (Hadley-Apennine region: 26.1322°N, 3.6339°E)
   let lat = $state(26.1322);
@@ -97,6 +107,58 @@
     pendingS2StartDate = offsetDays(newVal, -span);
   }
 
+  let ephemerisRequestId = 0;
+
+  async function fetchSitesCompareEphemeris(s1 = site1Coords, s2 = site2Coords, start = pendingStartDate, end = pendingEndDate) {
+    const reqId = ++ephemerisRequestId;
+    isCalculatingEphemeris = true;
+    try {
+      const [pos1, pos2] = await Promise.all([
+        fetchCurrentLunarPositions(s1.lat, s1.lon, { startDate: start, endDate: end }),
+        fetchCurrentLunarPositions(s2.lat, s2.lon, { startDate: start, endDate: end })
+      ]);
+      if (reqId !== ephemerisRequestId) return;
+      lunarPositions = pos1;
+      lunarPositionsS2 = pos2;
+      activeLunarPositions = activeSiteSlot === 1 ? pos1 : pos2;
+      activeStartDate = start;
+      activeEndDate = end;
+      currentPlayheadTime = pos1?.sunEntry?.time || '';
+    } catch (err) {
+      console.error('Failed to load sites compare ephemeris:', err);
+    } finally {
+      if (reqId === ephemerisRequestId) {
+        isCalculatingEphemeris = false;
+      }
+    }
+  }
+
+  async function fetchTimelinesCompareEphemeris(start1 = pendingStartDate, end1 = pendingEndDate, start2 = pendingS2StartDate, end2 = pendingS2EndDate) {
+    const reqId = ++ephemerisRequestId;
+    isCalculatingEphemeris = true;
+    try {
+      const [pos1, pos2] = await Promise.all([
+        fetchCurrentLunarPositions(lat, lon, { startDate: start1, endDate: end1 }),
+        fetchCurrentLunarPositions(lat, lon, { startDate: start2, endDate: end2 })
+      ]);
+      if (reqId !== ephemerisRequestId) return;
+      lunarPositions = pos1;
+      activeLunarPositions = pos1;
+      lunarPositionsS2 = pos2;
+      activeStartDate = start1;
+      activeEndDate = end1;
+      activeS2StartDate = start2;
+      activeS2EndDate = end2;
+      currentPlayheadTime = pos1?.sunEntry?.time || '';
+    } catch (err) {
+      console.error('Failed to load timelines compare ephemeris:', err);
+    } finally {
+      if (reqId === ephemerisRequestId) {
+        isCalculatingEphemeris = false;
+      }
+    }
+  }
+
   async function fetchS2Ephemeris(start, end) {
     try {
       const res = await fetchCurrentLunarPositions(lat, lon, { startDate: start, endDate: end });
@@ -135,14 +197,20 @@
 
   $effect(() => {
     if (mode === 'compare') {
-      const span = getDaysDiff(pendingStartDate, pendingEndDate);
-      if (!pendingS2StartDate) {
-        const defStart = pendingEndDate || offsetDays(pendingStartDate, span);
-        pendingS2StartDate = defStart;
-        pendingS2EndDate = offsetDays(defStart, span);
-      }
-      if (!lunarPositionsS2 && !isCalculatingEphemeris && pendingS2StartDate && pendingS2EndDate) {
-        fetchS2Ephemeris(pendingS2StartDate, pendingS2EndDate);
+      if (compareType === 'timelines') {
+        const span = getDaysDiff(pendingStartDate, pendingEndDate);
+        if (!pendingS2StartDate) {
+          const defStart = pendingEndDate || offsetDays(pendingStartDate, span);
+          pendingS2StartDate = defStart;
+          pendingS2EndDate = offsetDays(defStart, span);
+        }
+        if (!lunarPositionsS2 && !isCalculatingEphemeris && pendingS2StartDate && pendingS2EndDate) {
+          fetchTimelinesCompareEphemeris(pendingStartDate, pendingEndDate, pendingS2StartDate, pendingS2EndDate);
+        }
+      } else if (compareType === 'sites') {
+        if (!lunarPositionsS2 && !isCalculatingEphemeris && pendingStartDate && pendingEndDate) {
+          fetchSitesCompareEphemeris(site1Coords, site2Coords, pendingStartDate, pendingEndDate);
+        }
       }
     }
   });
@@ -160,6 +228,11 @@
 
   let hasDateChanged = $derived.by(() => {
     if (mode === 'compare') {
+      if (compareType === 'sites') {
+        const sValid = pendingStartDate && pendingEndDate && pendingStartDate <= pendingEndDate;
+        const sChanged = pendingStartDate !== activeStartDate || pendingEndDate !== activeEndDate;
+        return Boolean(sValid && (sChanged || !lunarPositionsS2));
+      }
       const s1Valid = pendingStartDate && pendingEndDate && pendingStartDate <= pendingEndDate;
       const s2Valid = pendingS2StartDate && pendingS2EndDate && pendingS2StartDate <= pendingS2EndDate;
       const s1Changed = pendingStartDate !== activeStartDate || pendingEndDate !== activeEndDate;
@@ -177,23 +250,10 @@
   async function handleSubmitDateRange() {
     if (!hasDateChanged || isCalculatingEphemeris) return;
     if (mode === 'compare') {
-      isCalculatingEphemeris = true;
-      try {
-        const [newPositions1, newPositions2] = await Promise.all([
-          fetchCurrentLunarPositions(lat, lon, { startDate: pendingStartDate, endDate: pendingEndDate }),
-          fetchCurrentLunarPositions(lat, lon, { startDate: pendingS2StartDate, endDate: pendingS2EndDate })
-        ]);
-        lunarPositions = newPositions1;
-        activeLunarPositions = newPositions1;
-        lunarPositionsS2 = newPositions2;
-        activeStartDate = pendingStartDate;
-        activeEndDate = pendingEndDate;
-        activeS2StartDate = pendingS2StartDate;
-        activeS2EndDate = pendingS2EndDate;
-      } catch (err) {
-        console.error('Failed to calculate compare ephemeris:', err);
-      } finally {
-        isCalculatingEphemeris = false;
+      if (compareType === 'sites') {
+        await fetchSitesCompareEphemeris(site1Coords, site2Coords, pendingStartDate, pendingEndDate);
+      } else {
+        await fetchTimelinesCompareEphemeris(pendingStartDate, pendingEndDate, pendingS2StartDate, pendingS2EndDate);
       }
     } else {
       await handleDateRangeChange({
@@ -204,56 +264,105 @@
   }
 
   onMount(async () => {
-    lunarPositions = await fetchCurrentLunarPositions(lat, lon);
-    activeLunarPositions = lunarPositions;
-    currentPlayheadTime = lunarPositions?.sunEntry?.time || '';
-    ephemerisLoaded = true;
+    const reqId = ++ephemerisRequestId;
+    isCalculatingEphemeris = true;
+    try {
+      const positions = await fetchCurrentLunarPositions(lat, lon);
+      if (reqId !== ephemerisRequestId) return;
+      lunarPositions = positions;
+      activeLunarPositions = positions;
+      currentPlayheadTime = positions?.sunEntry?.time || '';
+      ephemerisLoaded = true;
+    } catch (err) {
+      console.error('Failed to load initial ephemeris:', err);
+    } finally {
+      if (reqId === ephemerisRequestId) {
+        isCalculatingEphemeris = false;
+      }
+    }
   });
 
   async function handleCoordinateSelect(coords) {
-    if (isCalculatingEphemeris) return;
-    lat = Number(coords.lat.toFixed(4));
-    lon = Number(coords.lon.toFixed(4));
-    selectedCoords = { lat, lon, flyTo: Boolean(coords.flyTo), _ts: Date.now() };
-    isCalculatingEphemeris = true;
+    const selectedLat = Number(coords.lat.toFixed(4));
+    const selectedLon = Number(coords.lon.toFixed(4));
+    const recognizedLandmark = findLandmarkByCoords(selectedLat, selectedLon);
+    const siteName = coords.name || recognizedLandmark?.name || null;
 
-    try {
-      if (mode === 'compare' && pendingS2StartDate && pendingS2EndDate) {
-        const [newPositions1, newPositions2] = await Promise.all([
-          fetchCurrentLunarPositions(lat, lon, { startDate: pendingStartDate, endDate: pendingEndDate }),
-          fetchCurrentLunarPositions(lat, lon, { startDate: pendingS2StartDate, endDate: pendingS2EndDate })
-        ]);
-        lunarPositions = newPositions1;
-        activeLunarPositions = newPositions1;
-        lunarPositionsS2 = newPositions2;
-        currentPlayheadTime = newPositions1?.sunEntry?.time || '';
+    lat = selectedLat;
+    lon = selectedLon;
+    selectedCoords = { lat: selectedLat, lon: selectedLon, name: siteName, flyTo: Boolean(coords.flyTo), _ts: Date.now() };
+
+    if (mode === 'compare' && compareType === 'sites') {
+      const targetSlot = coords.slot ?? activeSiteSlot;
+      if (targetSlot === 1) {
+        site1Coords = { lat: selectedLat, lon: selectedLon, name: siteName || 'Apollo 15' };
       } else {
-        const newPositions = await fetchCurrentLunarPositions(lat, lon, customDateRange);
-        lunarPositions = newPositions;
-        activeLunarPositions = newPositions;
-        currentPlayheadTime = newPositions?.sunEntry?.time || '';
+        site2Coords = { lat: selectedLat, lon: selectedLon, name: siteName || 'Apollo 11' };
       }
-    } catch (err) {
-      console.error('Failed to calculate ephemeris for chosen coordinates:', err);
-    } finally {
-      isCalculatingEphemeris = false;
+      await fetchSitesCompareEphemeris(site1Coords, site2Coords, pendingStartDate, pendingEndDate);
+      return;
+    }
+
+    site1Coords = { lat: selectedLat, lon: selectedLon, name: siteName || 'Apollo 15' };
+
+    if (mode === 'compare' && compareType === 'timelines' && pendingS2StartDate && pendingS2EndDate) {
+      await fetchTimelinesCompareEphemeris(pendingStartDate, pendingEndDate, pendingS2StartDate, pendingS2EndDate);
+    } else {
+      await handleDateRangeChange(customDateRange);
+    }
+  }
+
+  function handleSelectSiteSlot(slot) {
+    activeSiteSlot = slot;
+    const targetSite = slot === 1 ? site1Coords : site2Coords;
+    if (targetSite) {
+      lat = targetSite.lat;
+      lon = targetSite.lon;
+      selectedCoords = { lat: targetSite.lat, lon: targetSite.lon, name: targetSite.name, flyTo: true, _ts: Date.now() };
+      activeLunarPositions = slot === 1 ? lunarPositions : lunarPositionsS2;
+    }
+  }
+
+  async function handleCompareTypeChange(type) {
+    compareType = type;
+    if (mode === 'compare') {
+      if (type === 'sites') {
+        const activeSite = activeSiteSlot === 1 ? site1Coords : site2Coords;
+        if (activeSite) {
+          lat = activeSite.lat;
+          lon = activeSite.lon;
+          selectedCoords = { lat: activeSite.lat, lon: activeSite.lon, name: activeSite.name, flyTo: true, _ts: Date.now() };
+        }
+        await fetchSitesCompareEphemeris(site1Coords, site2Coords, pendingStartDate, pendingEndDate);
+      } else if (type === 'timelines') {
+        const span = getDaysDiff(pendingStartDate, pendingEndDate);
+        if (!pendingS2StartDate) {
+          const defStart = pendingEndDate || offsetDays(pendingStartDate, span);
+          pendingS2StartDate = defStart;
+          pendingS2EndDate = offsetDays(defStart, span);
+        }
+        await fetchTimelinesCompareEphemeris(pendingStartDate, pendingEndDate, pendingS2StartDate, pendingS2EndDate);
+      }
     }
   }
 
   async function handleDateRangeChange(range) {
-    if (isCalculatingEphemeris) return;
     customDateRange = range;
+    const reqId = ++ephemerisRequestId;
     isCalculatingEphemeris = true;
 
     try {
       const newPositions = await fetchCurrentLunarPositions(lat, lon, customDateRange);
+      if (reqId !== ephemerisRequestId) return;
       lunarPositions = newPositions;
       activeLunarPositions = newPositions;
       currentPlayheadTime = newPositions?.sunEntry?.time || '';
     } catch (err) {
       console.error('Failed to calculate ephemeris for date range:', err);
     } finally {
-      isCalculatingEphemeris = false;
+      if (reqId === ephemerisRequestId) {
+        isCalculatingEphemeris = false;
+      }
     }
   }
 
@@ -299,7 +408,7 @@
       />
     </div>
 
-    {#if mode === 'single'}
+    {#if mode === 'single' || (mode === 'compare' && compareType === 'sites')}
       <!-- Start Date Picker: 80px from left edge -->
       <div class="hud-date-picker start-picker">
         <DatePicker
@@ -326,11 +435,14 @@
         />
       </div>
     {:else}
-      <!-- COMPARE MODE: Sample 1 on Left, Sample 2 on Right -->
+      <!-- TIMELINES COMPARE MODE: Sample 1 on Left, Sample 2 on Right -->
       <div class="hud-date-picker start-picker compare-sample-card" class:is-optimal-card={optimalSample === 1}>
         <div class="compare-card-header">
           <div class="compare-tag-wrap">
             <span class="compare-tag s1-tag">SAMPLE 1</span>
+            {#if optimalSample === 1}
+              <span class="optimal-sample-badge">OPTIMAL SAMPLE</span>
+            {/if}
           </div>
           <span class="compare-duration">{s1DurationDays} DAYS</span>
         </div>
@@ -390,6 +502,14 @@
       {lon}
       onCoordinateSelect={handleCoordinateSelect}
       bind:mode
+      bind:compareType
+      bind:activeSiteSlot
+      bind:site1Coords
+      bind:site2Coords
+      site1Name={site1DisplayName}
+      site2Name={site2DisplayName}
+      onSiteSlotSelect={handleSelectSiteSlot}
+      onCompareTypeChange={handleCompareTypeChange}
       {lunarPositions}
       {lunarPositionsS2}
       {optimalSample}
@@ -405,6 +525,9 @@
         {lunarPositions}
         {lunarPositionsS2}
         {mode}
+        {compareType}
+        site1Name={site1DisplayName}
+        site2Name={site2DisplayName}
         onTimeChange={handlePlayheadChange}
         {hoveredCoords}
         showSubmit={hasDateChanged}
