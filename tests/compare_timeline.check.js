@@ -275,4 +275,104 @@ assert.strictEqual(formatSampleDateRange(null), '', 'Empty when positions is nul
 
 console.log('✔ Interactive sample selection in timelines compare mode verified.');
 
+console.log('Testing Manual Coordinates & Prominent Site Name Display in Sites Compare Mode...');
+
+// Simulate slot state and coordinate selection logic
+let testSite1Coords = { lat: 26.1322, lon: 3.6339, name: 'Apollo 15' };
+let testSite2Coords = { lat: 0.6741, lon: 23.4730, name: 'Apollo 11' };
+
+function getSiteDisplayName(siteCoords) {
+  return siteCoords?.name || '';
+}
+
+function shouldRenderSiteSlotName(siteDisplayName) {
+  return Boolean(siteDisplayName);
+}
+
+function getVerdictBannerText(optimalSample, s1Name, s2Name, optimalValue = 12) {
+  const chosenName = optimalSample === 1 ? s1Name : s2Name;
+  const namePart = chosenName ? `(${chosenName}) ` : '';
+  return `SITE ${optimalSample} ${namePart}IS OPTIMAL WITH ${optimalValue}h OF SIMULTANEOUS POWER & COMMS`;
+}
+
+// 1. Initial state: prominent sites Apollo 15 and Apollo 11
+assert.strictEqual(getSiteDisplayName(testSite1Coords), 'Apollo 15');
+assert.strictEqual(getSiteDisplayName(testSite2Coords), 'Apollo 11');
+assert.strictEqual(shouldRenderSiteSlotName(getSiteDisplayName(testSite1Coords)), true);
+assert.strictEqual(shouldRenderSiteSlotName(getSiteDisplayName(testSite2Coords)), true);
+assert.strictEqual(
+  getVerdictBannerText(1, getSiteDisplayName(testSite1Coords), getSiteDisplayName(testSite2Coords)),
+  'SITE 1 (Apollo 15) IS OPTIMAL WITH 12h OF SIMULTANEOUS POWER & COMMS'
+);
+
+// 2. User enters manual coordinates for Site 1 (not matching any prominent landmark)
+function simulateCoordinateSelect({ lat, lon, name = null, slot = 1 }) {
+  const recognizedLandmark = findLandmarkByCoords(lat, lon);
+  const siteName = name || recognizedLandmark?.name || null;
+  if (slot === 1) {
+    testSite1Coords = { lat, lon, name: siteName };
+  } else {
+    testSite2Coords = { lat, lon, name: siteName };
+  }
+}
+
+// Enter manual coordinates (e.g. 15.5° N, 42.0° E)
+simulateCoordinateSelect({ lat: 15.5, lon: 42.0, name: null, slot: 1 });
+
+assert.strictEqual(testSite1Coords.name, null, 'Manual coordinates must have null site name');
+assert.strictEqual(getSiteDisplayName(testSite1Coords), '', 'Display name must be empty for manual coordinates');
+assert.strictEqual(
+  shouldRenderSiteSlotName(getSiteDisplayName(testSite1Coords)),
+  false,
+  'Site 1 slot card must HIDE prominent site name when manual coordinates are used'
+);
+assert.strictEqual(
+  getTrackTag(1, getSiteDisplayName(testSite1Coords), 'sites'),
+  'SITE 1',
+  'Timeline track tag must omit site name when manual coords are used'
+);
+assert.strictEqual(
+  getVerdictBannerText(1, getSiteDisplayName(testSite1Coords), getSiteDisplayName(testSite2Coords)),
+  'SITE 1 IS OPTIMAL WITH 12h OF SIMULTANEOUS POWER & COMMS',
+  'Verdict banner must not display old prominent site name or empty parens'
+);
+
+// Site 2 should still display Apollo 11
+assert.strictEqual(shouldRenderSiteSlotName(getSiteDisplayName(testSite2Coords)), true);
+assert.strictEqual(getSiteDisplayName(testSite2Coords), 'Apollo 11');
+
+// 3. User enters manual coordinates for Site 2 as well
+simulateCoordinateSelect({ lat: -33.2, lon: -12.4, name: null, slot: 2 });
+assert.strictEqual(testSite2Coords.name, null, 'Site 2 manual coordinates must have null site name');
+assert.strictEqual(getSiteDisplayName(testSite2Coords), '', 'Site 2 display name must be empty');
+assert.strictEqual(
+  shouldRenderSiteSlotName(getSiteDisplayName(testSite2Coords)),
+  false,
+  'Site 2 slot card must HIDE prominent site name when manual coordinates are used'
+);
+assert.strictEqual(
+  getVerdictBannerText(2, getSiteDisplayName(testSite1Coords), getSiteDisplayName(testSite2Coords)),
+  'SITE 2 IS OPTIMAL WITH 12h OF SIMULTANEOUS POWER & COMMS'
+);
+
+// 4. User selects a prominent site again (e.g. Apollo 12)
+simulateCoordinateSelect({ lat: -3.0124, lon: -23.4216, name: 'Apollo 12', slot: 1 });
+assert.strictEqual(testSite1Coords.name, 'Apollo 12');
+assert.strictEqual(getSiteDisplayName(testSite1Coords), 'Apollo 12');
+assert.strictEqual(
+  shouldRenderSiteSlotName(getSiteDisplayName(testSite1Coords)),
+  true,
+  'Prominent site name must be shown when a prominent site is selected'
+);
+assert.strictEqual(
+  getTrackTag(1, getSiteDisplayName(testSite1Coords), 'sites'),
+  'SITE 1 (Apollo 12)'
+);
+assert.strictEqual(
+  getVerdictBannerText(1, getSiteDisplayName(testSite1Coords), getSiteDisplayName(testSite2Coords)),
+  'SITE 1 (Apollo 12) IS OPTIMAL WITH 12h OF SIMULTANEOUS POWER & COMMS'
+);
+
+console.log('✔ Manual coordinates prominent site name hiding logic verified.');
+
 console.log('✔ All compare mode duration and timeline checks passed successfully!');

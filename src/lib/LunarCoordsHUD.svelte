@@ -169,12 +169,12 @@
     hasInputError = false;
     isEditing = false;
     const recognized = findLandmarkByCoords(parsedLat, parsedLon);
-    selectedLandmark = recognized || { name: 'Custom Site', lat: parsedLat, lon: parsedLon };
+    selectedLandmark = recognized || null;
     if (mode === 'compare' && compareType === 'sites') {
       if (activeSiteSlot === 1) {
-        site1Coords = { lat: parsedLat, lon: parsedLon, name: recognized?.name || 'Site 1' };
+        site1Coords = { lat: parsedLat, lon: parsedLon, name: recognized?.name || null };
       } else {
-        site2Coords = { lat: parsedLat, lon: parsedLon, name: recognized?.name || 'Site 2' };
+        site2Coords = { lat: parsedLat, lon: parsedLon, name: recognized?.name || null };
       }
       onCoordinateSelect?.({
         lat: parsedLat,
@@ -185,7 +185,7 @@
       });
     } else {
       if (site1Coords) {
-        site1Coords = { lat: parsedLat, lon: parsedLon, name: recognized?.name || 'Custom Site' };
+        site1Coords = { lat: parsedLat, lon: parsedLon, name: recognized?.name || null };
       }
       onCoordinateSelect?.({
         lat: parsedLat,
@@ -779,7 +779,9 @@
                       {/if}
                     </div>
                     <div class="site-slot-details">
-                      <span class="site-slot-name">{site1Name || 'Apollo 15'}</span>
+                      {#if site1Name}
+                        <span class="site-slot-name">{site1Name}</span>
+                      {/if}
                       <span class="site-slot-coords">{formatSiteCoords(site1Coords)}</span>
                     </div>
                     {#if sample1OptimalValue > 0 || sample2OptimalValue > 0}
@@ -811,7 +813,9 @@
                       {/if}
                     </div>
                     <div class="site-slot-details">
-                      <span class="site-slot-name">{site2Name || 'Apollo 11'}</span>
+                      {#if site2Name}
+                        <span class="site-slot-name">{site2Name}</span>
+                      {/if}
                       <span class="site-slot-coords">{formatSiteCoords(site2Coords)}</span>
                     </div>
                     {#if sample1OptimalValue > 0 || sample2OptimalValue > 0}
@@ -827,7 +831,7 @@
                   <div class="optimal-verdict-banner">
                     <span class="verdict-icon">★</span>
                     <span class="verdict-text">
-                      SITE {activeOptimalSample} ({activeOptimalSample === 1 ? (site1Name || 'SITE 1') : (site2Name || 'SITE 2')}) IS OPTIMAL WITH {optimalSampleValue}h OF SIMULTANEOUS POWER & COMMS
+                      SITE {activeOptimalSample} {(activeOptimalSample === 1 ? site1Name : site2Name) ? `(${activeOptimalSample === 1 ? site1Name : site2Name}) ` : ''}IS OPTIMAL WITH {optimalSampleValue}h OF SIMULTANEOUS POWER & COMMS
                     </span>
                   </div>
                 {:else}

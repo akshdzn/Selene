@@ -19,8 +19,8 @@
   let site1Coords = $state({ lat: 26.1322, lon: 3.6339, name: 'Apollo 15' });
   let site2Coords = $state({ lat: 0.6741, lon: 23.4730, name: 'Apollo 11' });
 
-  let site1DisplayName = $derived(site1Coords?.name || 'Apollo 15');
-  let site2DisplayName = $derived(site2Coords?.name || 'Apollo 11');
+  let site1DisplayName = $derived(site1Coords?.name || '');
+  let site2DisplayName = $derived(site2Coords?.name || '');
 
   // Apollo 15 landing site (Hadley-Apennine region: 26.1322°N, 3.6339°E)
   let lat = $state(26.1322);
@@ -297,15 +297,15 @@
     if (mode === 'compare' && compareType === 'sites') {
       const targetSlot = coords.slot ?? activeSiteSlot;
       if (targetSlot === 1) {
-        site1Coords = { lat: selectedLat, lon: selectedLon, name: siteName || 'Apollo 15' };
+        site1Coords = { lat: selectedLat, lon: selectedLon, name: siteName || null };
       } else {
-        site2Coords = { lat: selectedLat, lon: selectedLon, name: siteName || 'Apollo 11' };
+        site2Coords = { lat: selectedLat, lon: selectedLon, name: siteName || null };
       }
       await fetchSitesCompareEphemeris(site1Coords, site2Coords, pendingStartDate, pendingEndDate);
       return;
     }
 
-    site1Coords = { lat: selectedLat, lon: selectedLon, name: siteName || 'Apollo 15' };
+    site1Coords = { lat: selectedLat, lon: selectedLon, name: siteName || null };
 
     if (mode === 'compare' && compareType === 'timelines' && pendingS2StartDate && pendingS2EndDate) {
       await fetchTimelinesCompareEphemeris(pendingStartDate, pendingEndDate, pendingS2StartDate, pendingS2EndDate);
