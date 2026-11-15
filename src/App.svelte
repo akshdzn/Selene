@@ -3,6 +3,7 @@
   import Globe from './lib/Globe.svelte';
   import LandingPage from './lib/landing.svelte';
   import Timeline from './lib/Timeline.svelte';
+  import DatePicker from './lib/DatePicker.svelte';
   import { fetchCurrentLunarPositions } from './lib/ephemeris.js';
 
   let showLanding = $state(true);
@@ -19,6 +20,50 @@
   let currentPlayheadTime = $state('');
   let hoveredCoords = $state(null);
   let customDateRange = $state(null);
+
+  // Active dates calculated in ephemeris
+  let activeStartDate = $state('');
+  let activeEndDate = $state('');
+
+  // Pending user-selected dates
+  let pendingStartDate = $state('');
+  let pendingEndDate = $state('');
+
+  function formatDateToYMD(d) {
+    if (!d) return '';
+    const date = typeof d === 'string' ? new Date(d) : d;
+    if (isNaN(date.getTime())) return '';
+    const pad = (n) => String(n).padStart(2, '0');
+    return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}`;
+  }
+
+  $effect(() => {
+    if (lunarPositions?.timeRange) {
+      const start = formatDateToYMD(lunarPositions.timeRange.startDate);
+      const end = formatDateToYMD(lunarPositions.timeRange.endDate);
+      activeStartDate = start;
+      activeEndDate = end;
+      pendingStartDate = start;
+      pendingEndDate = end;
+    }
+  });
+
+  let hasDateChanged = $derived(
+    Boolean(
+      pendingStartDate &&
+      pendingEndDate &&
+      pendingStartDate <= pendingEndDate &&
+      (pendingStartDate !== activeStartDate || pendingEndDate !== activeEndDate)
+    )
+  );
+
+  async function handleSubmitDateRange() {
+    if (!hasDateChanged || isCalculatingEphemeris) return;
+    await handleDateRangeChange({
+      startDate: pendingStartDate,
+      endDate: pendingEndDate
+    });
+  }
 
   onMount(async () => {
     lunarPositions = await fetchCurrentLunarPositions(lat, lon);
@@ -104,6 +149,32 @@
       />
     </div>
 
+    <!-- Start Date Picker: 80px from left edge -->
+    <div class="hud-date-picker start-picker">
+      <DatePicker
+        label="START DATE"
+        value={pendingStartDate}
+        max={pendingEndDate}
+        align="left"
+        disabled={isCalculatingEphemeris}
+        onchange={(val) => { pendingStartDate = val; }}
+        onsubmit={handleSubmitDateRange}
+      />
+    </div>
+
+    <!-- End Date Picker: 80px from right edge -->
+    <div class="hud-date-picker end-picker">
+      <DatePicker
+        label="END DATE"
+        value={pendingEndDate}
+        min={pendingStartDate}
+        align="right"
+        disabled={isCalculatingEphemeris}
+        onchange={(val) => { pendingEndDate = val; }}
+        onsubmit={handleSubmitDateRange}
+      />
+    </div>
+
     {#if isCalculatingEphemeris}
       <div class="ephemeris-loading-hud">
         <div class="loader"></div>
@@ -113,8 +184,9 @@
       <Timeline
         {lunarPositions}
         onTimeChange={handlePlayheadChange}
-        onDateRangeChange={handleDateRangeChange}
         {hoveredCoords}
+        showSubmit={hasDateChanged}
+        onSubmit={handleSubmitDateRange}
       />
     {/if}
   {/if}
@@ -153,6 +225,23 @@
   }
   .globe-layer {
     z-index: 1;
+  }
+
+  /* Date Pickers placed 80px from viewport edges at mid-height (equatorial level) */
+  .hud-date-picker {
+    position: absolute;
+    top: 50%;
+    transform: translateY(-50%);
+    z-index: 20;
+    pointer-events: auto;
+  }
+
+  .start-picker {
+    left: 80px;
+  }
+
+  .end-picker {
+    right: 80px;
   }
 
   /* Loading HUD shown when calculating new ephemeris after double clicking coordinate */

@@ -2,32 +2,15 @@
   import { onMount, onDestroy } from 'svelte';
   import { calculateCelestialPositions } from './ephemeris.js';
   import Scritto from "@scritto/svelte";
-  import DateRangeSelector from './DateRangeSelector.svelte';
+  import SubmitButton from './SubmitButton.svelte';
 
   let {
     lunarPositions = null,
     onTimeChange = null,
-    onDateRangeChange = null,
-    hoveredCoords = null
+    hoveredCoords = null,
+    showSubmit = false,
+    onSubmit = () => {}
   } = $props();
-
-  let initialStartDate = $derived.by(() => {
-    const d = lunarPositions?.timeRange?.startDate;
-    if (!d) return '';
-    const date = typeof d === 'string' ? new Date(d) : d;
-    if (isNaN(date.getTime())) return '';
-    const pad = (n) => String(n).padStart(2, '0');
-    return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}`;
-  });
-
-  let initialEndDate = $derived.by(() => {
-    const d = lunarPositions?.timeRange?.endDate;
-    if (!d) return '';
-    const date = typeof d === 'string' ? new Date(d) : d;
-    if (isNaN(date.getTime())) return '';
-    const pad = (n) => String(n).padStart(2, '0');
-    return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}`;
-  });
 
   // Reactive state
   let currentPlayheadIndex = $state(240);
@@ -503,14 +486,15 @@
 </script>
 
 <div class="timeline-wrapper">
-  <!-- Top Left Date Range Selector (Figma Node #33:176) -->
-  <div class="timeline-date-selector">
-    <DateRangeSelector
-      startDate={initialStartDate}
-      endDate={initialEndDate}
-      onChange={onDateRangeChange}
-    />
-  </div>
+  <!-- Centered Calculate Submit Button directly above timeline -->
+  {#if showSubmit}
+    <div class="timeline-calculate-container">
+      <SubmitButton
+        label="CALCULATE"
+        onclick={onSubmit}
+      />
+    </div>
+  {/if}
 
   <!-- Scrollable viewport for scalable timeline contents -->
   <!-- svelte-ignore a11y_no_static_element_interactions -->
@@ -704,12 +688,14 @@
     pointer-events: auto;
   }
 
-  /* Top Left Date Range Selector positioned on the left above the timeline */
-  .timeline-date-selector {
+  /* Centered Calculate Submit Button positioned directly above timeline badges */
+  .timeline-calculate-container {
     position: absolute;
     bottom: calc(100% + 14px);
-    left: 0;
+    left: 50%;
+    transform: translateX(-50%);
     z-index: 25;
+    pointer-events: auto;
   }
 
   /* Scrollable Viewport & Scalable Content */
