@@ -1,7 +1,8 @@
 <script>
   import { onMount, tick } from 'svelte';
-  import { Tabs } from 'bits-ui';
+  import { Tabs, Combobox } from 'bits-ui';
   import { convertToDirectionalCoords, parseCoordinateInput } from './ephemeris.js';
+  import { getLandmarkTypes, getLandmarksByType } from './places.js';
 
   let {
     selectedCoords = null,
@@ -17,6 +18,22 @@
   let editLatInput = $state('');
   let editLonInput = $state('');
   let hasInputError = $state(false);
+
+  let selectedType = $state('');
+  let typeInputValue = $state('');
+  const landmarkTypes = getLandmarkTypes();
+
+  let filteredTypeOptions = $derived.by(() => {
+    if (!typeInputValue) return landmarkTypes;
+    return landmarkTypes.filter((t) =>
+      t.label.toLowerCase().includes(typeInputValue.toLowerCase())
+    );
+  });
+
+  let listedLandmarks = $derived.by(() => {
+    if (!selectedType) return [];
+    return getLandmarksByType(selectedType);
+  });
 
   let latInputEl = $state(null);
   let lonInputEl = $state(null);
@@ -122,6 +139,31 @@
     if (isEditing && hudBoxEl && !hudBoxEl.contains(e.target)) {
       commitEditing();
     }
+  }
+
+  function isLandmarkActive(landmark) {
+    const targetLat = landmark.latitude ?? landmark.lat;
+    const targetLon = landmark.longitude ?? landmark.lon;
+    if (typeof targetLat !== 'number' || typeof targetLon !== 'number') return false;
+    return (
+      Math.abs(currentLatNum - targetLat) < 0.005 &&
+      Math.abs(currentLonNum - targetLon) < 0.005
+    );
+  }
+
+  function handleSelectLandmark(landmark) {
+    const targetLat = landmark.latitude ?? landmark.lat;
+    const targetLon = landmark.longitude ?? landmark.lon;
+    if (typeof targetLat === 'number' && typeof targetLon === 'number') {
+      onCoordinateSelect?.({ lat: targetLat, lon: targetLon, flyTo: true });
+    }
+  }
+
+  function formatLandmarkCoords(landmark) {
+    const targetLat = landmark.latitude ?? landmark.lat;
+    const targetLon = landmark.longitude ?? landmark.lon;
+    const formatted = convertToDirectionalCoords(targetLat, targetLon, { precision: 3, space: ' ' });
+    return `${formatted.latStr}, ${formatted.lonStr}`;
   }
 
   onMount(() => {
@@ -304,11 +346,146 @@
         </Tabs.List>
 
         <Tabs.Content value="single" class="tab-content">
-          <!-- Blank popdown content for Single -->
-        </Tabs.Content>
+          <div class="combobox-section">
+            <span class="combobox-label">LANDMARK CATEGORY</span>
+            <Combobox.Root
+              type="single"
+              bind:value={selectedType}
+              bind:inputValue={typeInputValue}
+              items={landmarkTypes}
+              onValueChange={(val) => {
+                selectedType = val ?? '';
+              }}
+            >
+              <div class="combobox-input-row">
+                <Combobox.Input
+                  class="combobox-search-input"
+                  placeholder="Select landmark type..."
+                  aria-label="Select landmark type"
+                />
+                {#if selectedType}
+                  <button
+                    type="button"
+                    class="combobox-action-btn combobox-clear-btn"
+                    onclick={(e) => {
+                      e.stopPropagation();
+                      selectedType = '';
+                      typeInputValue = '';
+                    }}
+                    title="Clear selection"
+                    aria-label="Clear selection"
+                  >
+                    ✕
+                  </button>
+                {/if}
+                <Combobox.Trigger
+                  class="combobox-action-btn combobox-trigger-btn"
+                  aria-label="Toggle landmark types dropdown"
+                >
+                  <svg
+                    class="combobox-chevron"
+                    width="14"
+                    height="14"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    stroke-width="2.2"
+                  >
+                    <polyline points="6 9 12 15 18 9"></polyline>
+                  </svg>
+                </Combobox.Trigger>
+              </div>
 
-        <Tabs.Content value="compare" class="tab-content">
-          <!-- Blank popdown content for Compare -->
+              <Combobox.Portal>
+                <Combobox.Content
+                  class="combobox-content-portal"
+                  side="bottom"
+                  sideOffset={6}
+                  align="start"
+                >
+                  <Combobox.Viewport class="combobox-viewport">
+                    {#each filteredTypeOptions as opt (opt.value)}
+                      <Combobox.Item
+                        value={opt.value}
+                        label={opt.label}
+                        class="combobox-item-option"
+                      >
+                        <span class="option-label">{opt.label}</span>
+                        <span class="option-badge">[{opt.count}]</span>
+                      </Combobox.Item>
+                    {/each}
+                    {#if filteredTypeOptions.length === 0}
+                      <div class="combobox-empty-row">No matching types found</div>
+                    {/if}
+                  </Combobox.Viewport>
+                </Combobox.Content>
+              </Combobox.Portal>
+            </Combobox.Root>
+          </div>
+
+          <!-- Landmarks Listed Below Combobox When A Type Is Selected -->
+          {#if selectedType}
+            <div class="landmarks-list-section">
+              <div class="landmarks-list-header">
+                <span class="section-title">{selectedType}</span>
+                <span class="section-count">
+                  {listedLandmarks.length} {listedLandmarks.length === 1 ? 'LOCATION' : 'LOCATIONS'}
+                </span>
+              </div>
+
+              <div class="landmarks-scroll-container">
+                {#each listedLandmarks as landmark (landmark.name)}
+                  {@const isActive = isLandmarkActive(landmark)}
+                  <button
+                    type="button"
+                    class="landmark-item-row"
+                    class:is-active={isActive}
+                    onclick={() => handleSelectLandmark(landmark)}
+                    title="Click to navigate to {landmark.name} on the Moon"
+                    aria-label="Select landmark {landmark.name}"
+                  >
+                    <div class="landmark-left-col">
+                      <span class="landmark-dot" class:is-active={isActive}></span>
+                      <div class="landmark-text-block">
+                        <span class="landmark-name-text">{landmark.name}</span>
+                        <span class="landmark-coords-text">
+                          {formatLandmarkCoords(landmark)}
+                        </span>
+                      </div>
+                    </div>
+
+                    <div class="landmark-right-col">
+                      {#if landmark.diameter_km}
+                        <span class="landmark-metric-badge">Ø {Math.round(landmark.diameter_km)} km</span>
+                      {:else if landmark.country}
+                        <span class="landmark-metric-badge">{landmark.country}</span>
+                      {/if}
+                      {#if isActive}
+                        <span class="landmark-locked-tag">TARGETED</span>
+                      {/if}
+                    </div>
+                  </button>
+                {/each}
+              </div>
+            </div>
+          {:else}
+            <div class="landmarks-empty-state">
+              <div class="empty-state-icon">
+                <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">
+                  <circle cx="12" cy="12" r="10"></circle>
+                  <circle cx="12" cy="12" r="3"></circle>
+                  <line x1="12" y1="2" x2="12" y2="5"></line>
+                  <line x1="12" y1="19" x2="12" y2="22"></line>
+                  <line x1="2" y1="12" x2="5" y2="12"></line>
+                  <line x1="19" y1="12" x2="22" y2="12"></line>
+                </svg>
+              </div>
+              <span class="empty-state-title">SELECT A LANDMARK TYPE</span>
+              <p class="empty-state-desc">
+                Choose a landmark category from the combobox above to browse Maria, mountain ranges, and historical landing sites.
+              </p>
+            </div>
+          {/if}
         </Tabs.Content>
       </Tabs.Root>
     </div>
@@ -585,6 +762,10 @@
     display: flex;
     flex-direction: column;
     min-height: 220px;
+    max-height: 480px;
+    overflow-y: auto;
+    scrollbar-width: thin;
+    scrollbar-color: rgba(255, 255, 255, 0.2) transparent;
     animation: dropdownSlideDown 0.22s cubic-bezier(0.16, 1, 0.3, 1);
     transform-origin: top center;
   }
@@ -643,9 +824,374 @@
   :global(.tab-content) {
     width: 100%;
     flex: 1;
-    min-height: 140px;
     box-sizing: border-box;
+    padding: 12px 14px 16px 14px;
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
     outline: none;
+  }
+
+  /* ---------------- Combobox Styles ---------------- */
+  .combobox-section {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    width: 100%;
+    box-sizing: border-box;
+  }
+
+  .combobox-label {
+    font-family: 'Space Grotesk', -apple-system, BlinkMacSystemFont, sans-serif;
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: 1.2px;
+    color: rgba(255, 255, 255, 0.65);
+    text-transform: uppercase;
+  }
+
+  .combobox-input-row {
+    position: relative;
+    display: flex;
+    align-items: center;
+    width: 100%;
+    height: 38px;
+    background: rgba(255, 255, 255, 0.07);
+    border: 1px solid rgba(255, 255, 255, 0.2);
+    border-radius: 3px;
+    box-sizing: border-box;
+    transition: all 0.15s ease;
+  }
+
+  .combobox-input-row:focus-within {
+    border-color: rgba(51, 229, 255, 0.8);
+    background: rgba(255, 255, 255, 0.1);
+    box-shadow: 0 0 12px rgba(51, 229, 255, 0.25);
+  }
+
+  :global(.combobox-search-input) {
+    flex: 1;
+    height: 100%;
+    background: transparent;
+    border: none;
+    outline: none;
+    padding: 0 12px;
+    font-family: 'Space Grotesk', -apple-system, BlinkMacSystemFont, sans-serif;
+    font-size: 13.5px;
+    font-weight: 500;
+    color: #ffffff;
+    letter-spacing: 0.4px;
+    box-sizing: border-box;
+  }
+
+  :global(.combobox-search-input::placeholder) {
+    color: rgba(255, 255, 255, 0.45);
+  }
+
+  .combobox-action-btn {
+    all: unset;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 32px;
+    height: 100%;
+    cursor: pointer;
+    color: rgba(255, 255, 255, 0.65);
+    transition: color 0.15s ease, transform 0.15s ease;
+    box-sizing: border-box;
+  }
+
+  .combobox-action-btn:hover {
+    color: #ffffff;
+  }
+
+  .combobox-clear-btn {
+    font-size: 12px;
+    color: rgba(255, 255, 255, 0.5);
+  }
+
+  .combobox-clear-btn:hover {
+    color: #ff6b6b;
+  }
+
+  .combobox-chevron {
+    transition: transform 0.2s ease;
+  }
+
+  :global(.combobox-content-portal) {
+    z-index: 9999;
+    min-width: 395px;
+    max-height: 240px;
+    background: rgba(10, 14, 24, 0.94);
+    backdrop-filter: blur(20px) saturate(160%);
+    -webkit-backdrop-filter: blur(20px) saturate(160%);
+    border: 1px solid rgba(255, 255, 255, 0.22);
+    border-radius: 3px;
+    box-shadow:
+      0 14px 34px rgba(0, 0, 0, 0.8),
+      0 0 20px rgba(0, 140, 255, 0.15);
+    padding: 4px;
+    box-sizing: border-box;
+    overflow-y: auto;
+    scrollbar-width: thin;
+    scrollbar-color: rgba(255, 255, 255, 0.25) transparent;
+  }
+
+  :global(.combobox-viewport) {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+  }
+
+  :global(.combobox-item-option) {
+    all: unset;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 8px 12px;
+    font-family: 'Space Grotesk', -apple-system, BlinkMacSystemFont, sans-serif;
+    font-size: 13.5px;
+    font-weight: 500;
+    color: rgba(255, 255, 255, 0.9);
+    border-radius: 2px;
+    cursor: pointer;
+    box-sizing: border-box;
+    transition: background 0.12s ease, color 0.12s ease;
+  }
+
+  :global(.combobox-item-option:hover),
+  :global(.combobox-item-option[data-highlighted]) {
+    background: rgba(255, 255, 255, 0.12);
+    color: #ffffff;
+  }
+
+  :global(.combobox-item-option[data-state="checked"]) {
+    background: rgba(51, 229, 255, 0.18);
+    color: #33e5ff;
+    font-weight: 600;
+  }
+
+  .option-label {
+    letter-spacing: 0.3px;
+  }
+
+  .option-badge {
+    font-family: 'Jersey 25', sans-serif;
+    font-size: 13px;
+    color: #ffaa55;
+    letter-spacing: 0.8px;
+  }
+
+  .combobox-empty-row {
+    padding: 12px;
+    text-align: center;
+    font-family: 'Space Grotesk', sans-serif;
+    font-size: 13px;
+    color: rgba(255, 255, 255, 0.45);
+  }
+
+  /* ---------------- Landmarks List Section ---------------- */
+  .landmarks-list-section {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    width: 100%;
+    margin-top: 2px;
+  }
+
+  .landmarks-list-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding-bottom: 4px;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.12);
+  }
+
+  .section-title {
+    font-family: 'Space Grotesk', -apple-system, BlinkMacSystemFont, sans-serif;
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: 1.1px;
+    color: rgba(255, 255, 255, 0.7);
+    text-transform: uppercase;
+  }
+
+  .section-count {
+    font-family: 'Jersey 25', sans-serif;
+    font-size: 13.5px;
+    color: #ffaa55;
+    letter-spacing: 1px;
+  }
+
+  .landmarks-scroll-container {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    max-height: 220px;
+    overflow-y: auto;
+    padding-right: 2px;
+    scrollbar-width: thin;
+    scrollbar-color: rgba(255, 255, 255, 0.25) transparent;
+  }
+
+  .landmark-item-row {
+    all: unset;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 9px 12px;
+    background: rgba(255, 255, 255, 0.05);
+    border: 1px solid rgba(255, 255, 255, 0.12);
+    border-radius: 3px;
+    cursor: pointer;
+    box-sizing: border-box;
+    transition: all 0.15s cubic-bezier(0.16, 1, 0.3, 1);
+  }
+
+  .landmark-item-row:hover {
+    background: rgba(255, 255, 255, 0.12);
+    border-color: rgba(51, 229, 255, 0.5);
+    transform: translateY(-1px);
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3), 0 0 10px rgba(51, 229, 255, 0.15);
+  }
+
+  .landmark-item-row.is-active {
+    background: rgba(51, 229, 255, 0.14);
+    border-color: #33e5ff;
+    box-shadow: 0 0 14px rgba(51, 229, 255, 0.25), inset 0 0 8px rgba(51, 229, 255, 0.08);
+  }
+
+  .landmark-left-col {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+  }
+
+  .landmark-dot {
+    width: 7px;
+    height: 7px;
+    border-radius: 50%;
+    background: rgba(255, 255, 255, 0.35);
+    box-shadow: 0 0 4px rgba(255, 255, 255, 0.2);
+    transition: all 0.15s ease;
+    flex-shrink: 0;
+  }
+
+  .landmark-dot.is-active {
+    background: #33e5ff;
+    box-shadow: 0 0 8px #33e5ff;
+    transform: scale(1.2);
+  }
+
+  .landmark-text-block {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+  }
+
+  .landmark-name-text {
+    font-family: 'Space Grotesk', -apple-system, BlinkMacSystemFont, sans-serif;
+    font-size: 13.5px;
+    font-weight: 600;
+    color: #ffffff;
+    letter-spacing: 0.3px;
+  }
+
+  .landmark-coords-text {
+    font-family: 'Space Grotesk', -apple-system, BlinkMacSystemFont, sans-serif;
+    font-size: 11.5px;
+    color: rgba(255, 255, 255, 0.6);
+    letter-spacing: 0.3px;
+  }
+
+  .landmark-right-col {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+
+  .landmark-metric-badge {
+    font-family: 'Jersey 25', sans-serif;
+    font-size: 13px;
+    color: rgba(255, 255, 255, 0.8);
+    background: rgba(255, 255, 255, 0.07);
+    padding: 2px 7px;
+    border-radius: 2px;
+    letter-spacing: 0.8px;
+    border: 1px solid rgba(255, 255, 255, 0.1);
+  }
+
+  .landmark-locked-tag {
+    font-family: 'Jersey 25', sans-serif;
+    font-size: 12.5px;
+    color: #33e5ff;
+    letter-spacing: 1px;
+    text-shadow: 0 0 6px rgba(51, 229, 255, 0.6);
+  }
+
+  /* Empty State / Placeholder */
+  .landmarks-empty-state {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    padding: 20px 16px;
+    text-align: center;
+    background: rgba(255, 255, 255, 0.03);
+    border: 1px dashed rgba(255, 255, 255, 0.15);
+    border-radius: 3px;
+    gap: 8px;
+  }
+
+  .empty-state-icon {
+    color: rgba(255, 255, 255, 0.4);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+
+  .empty-state-title {
+    font-family: 'Jersey 25', sans-serif;
+    font-size: 15px;
+    color: rgba(255, 255, 255, 0.85);
+    letter-spacing: 1.2px;
+  }
+
+  .empty-state-desc {
+    margin: 0;
+    font-family: 'Space Grotesk', sans-serif;
+    font-size: 12px;
+    color: rgba(255, 255, 255, 0.5);
+    line-height: 1.4;
+    max-width: 280px;
+  }
+
+  /* Compare Mode Placeholder */
+  .compare-placeholder {
+    padding: 24px 16px;
+    text-align: center;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 8px;
+    background: rgba(255, 255, 255, 0.03);
+    border: 1px dashed rgba(255, 255, 255, 0.15);
+    border-radius: 3px;
+  }
+
+  .compare-tag {
+    font-family: 'Jersey 25', sans-serif;
+    font-size: 16px;
+    color: #ffaa55;
+    letter-spacing: 1.2px;
+  }
+
+  .compare-desc {
+    margin: 0;
+    font-family: 'Space Grotesk', sans-serif;
+    font-size: 12.5px;
+    color: rgba(255, 255, 255, 0.6);
+    line-height: 1.45;
   }
 
   @keyframes dropdownSlideDown {

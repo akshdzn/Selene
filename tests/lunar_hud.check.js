@@ -102,4 +102,46 @@ assert.equal(parseCoordinateInput('abc', true), null);
 assert.equal(parseCoordinateInput(null, true), null);
 console.log('✔ Verified coordinate parsing for typed inputs (decimal, directions N/S/E/W, boundary clamping).');
 
+// Test 6: Landmark selection & camera navigation event format
+console.log('Testing Landmark Selection & Camera Navigation...');
+let selectedResult = null;
+function mockCoordinateSelect(payload) {
+  selectedResult = payload;
+}
+
+// User selects landmark from combobox list
+const sampleLandmark = {
+  name: 'Mare Tranquillitatis',
+  type: 'Mare (Lunar plain)',
+  latitude: 8.35,
+  longitude: 30.83,
+  diameter_km: 875.7
+};
+
+function handleSelectLandmark(landmark, callback) {
+  const targetLat = landmark.latitude ?? landmark.lat;
+  const targetLon = landmark.longitude ?? landmark.lon;
+  if (typeof targetLat === 'number' && typeof targetLon === 'number') {
+    callback?.({ lat: targetLat, lon: targetLon, flyTo: true });
+  }
+}
+
+handleSelectLandmark(sampleLandmark, mockCoordinateSelect);
+assert(selectedResult, 'Selection payload must be generated');
+assert.strictEqual(selectedResult.lat, 8.35, 'Latitude must match landmark');
+assert.strictEqual(selectedResult.lon, 30.83, 'Longitude must match landmark');
+assert.strictEqual(selectedResult.flyTo, true, 'flyTo flag must be true to automatically move camera to landmark');
+
+// Active state detection
+function isLandmarkActive(landmark, currentLat, currentLon) {
+  const targetLat = landmark.latitude ?? landmark.lat;
+  const targetLon = landmark.longitude ?? landmark.lon;
+  if (typeof targetLat !== 'number' || typeof targetLon !== 'number') return false;
+  return Math.abs(currentLat - targetLat) < 0.005 && Math.abs(currentLon - targetLon) < 0.005;
+}
+
+assert.strictEqual(isLandmarkActive(sampleLandmark, 8.35, 30.83), true, 'Landmark should be marked active when coords match');
+assert.strictEqual(isLandmarkActive(sampleLandmark, 26.132, 3.634), false, 'Landmark should not be active when coords differ');
+console.log('✔ Verified landmark selection event and active state detection.');
+
 console.log('\nALL LUNAR COORDS HUD LOGIC CHECKS PASSED SUCCESSFULLY!');

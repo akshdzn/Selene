@@ -78,7 +78,7 @@
     if (isCalculatingEphemeris) return;
     lat = Number(coords.lat.toFixed(4));
     lon = Number(coords.lon.toFixed(4));
-    selectedCoords = { lat, lon };
+    selectedCoords = { lat, lon, flyTo: Boolean(coords.flyTo), _ts: Date.now() };
     isCalculatingEphemeris = true;
 
     try {
