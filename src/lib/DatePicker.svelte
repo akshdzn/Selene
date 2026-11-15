@@ -47,7 +47,7 @@
   }
 </script>
 
-<div class="date-picker-container align-{align}">
+<div class="date-picker-container align-{align}" class:is-disabled={disabled}>
   <span class="date-picker-label">
     {label}
   </span>
@@ -208,6 +208,23 @@
   .date-input-box:focus-within {
     border-color: rgba(255, 255, 255, 0.6);
     background: rgba(255, 255, 255, 0.16);
+  }
+
+  .date-picker-container.is-disabled {
+    opacity: 0.55;
+    pointer-events: none;
+    user-select: none;
+  }
+
+  .date-picker-container.is-disabled .date-input-box {
+    cursor: not-allowed;
+    background: rgba(255, 255, 255, 0.04);
+    border-color: rgba(255, 255, 255, 0.08);
+  }
+
+  :global(.date-picker-container.is-disabled .calendar-trigger-btn) {
+    opacity: 0.3;
+    pointer-events: none;
   }
 
   :global(.bits-date-input) {

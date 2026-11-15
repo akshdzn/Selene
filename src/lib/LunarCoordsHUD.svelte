@@ -8,11 +8,11 @@
     hoveredCoords = null,
     lat = 26.1322,
     lon = 3.6339,
-    onCoordinateSelect = null
+    onCoordinateSelect = null,
+    mode = $bindable('single')
   } = $props();
 
   let isDropdownOpen = $state(false);
-  let activeTab = $state('single');
   let isEditing = $state(false);
   let editLatInput = $state('');
   let editLonInput = $state('');
@@ -293,7 +293,7 @@
       role="region"
       aria-label="Lunar site popdown"
     >
-      <Tabs.Root bind:value={activeTab} class="popdown-tabs">
+      <Tabs.Root bind:value={mode} class="popdown-tabs">
         <Tabs.List class="tabs-list">
           <Tabs.Trigger value="single" class="tab-trigger">
             Single
