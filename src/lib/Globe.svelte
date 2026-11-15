@@ -7,6 +7,7 @@
 	import moonUrl from '../assets/moon.webp';
 	import moonDisplacementUrl from '../assets/moon_displacement.tif';
 	import earthUrl from '../assets/earth.jpg';
+	import earthNightUrl from '../assets/earth_night.jpg';
 	import markerSvgUrl from '../assets/Marker.svg';
 	import placesData from './Places.json' with { type: 'json' };
 	import landingSitesData from './moon_landing_sites.json' with { type: 'json' };
@@ -748,11 +749,14 @@
 		// 6. Background Earth illuminated by directional sunlight
 		const earthTexture = textureLoader.load(earthUrl);
 		earthTexture.colorSpace = THREE.SRGBColorSpace;
+		const earthNightTexture = textureLoader.load(earthNightUrl);
+		earthNightTexture.colorSpace = THREE.SRGBColorSpace;
 
 		const earthSunDir = new THREE.Vector3().subVectors(sunPos, earthPos).normalize();
 		const earthMaterial = new THREE.ShaderMaterial({
 			uniforms: {
 				uMap: { value: earthTexture },
+				uMapNight: { value: earthNightTexture },
 				uSunDirection: { value: earthSunDir }
 			},
 			vertexShader: /* glsl */`
@@ -770,24 +774,30 @@
 			`,
 			fragmentShader: /* glsl */`
 				uniform sampler2D uMap;
+				uniform sampler2D uMapNight;
 				uniform vec3 uSunDirection;
 				varying vec2 vUv;
 				varying vec3 vWorldNormal;
 				varying vec3 vViewDirection;
 
 				void main() {
-					vec4 texColor = texture2D(uMap, vUv);
+					vec4 dayTex = texture2D(uMap, vUv);
+					vec4 nightTex = texture2D(uMapNight, vUv);
 					vec3 N = normalize(vWorldNormal);
 					float NdotL = dot(N, uSunDirection);
 
 					// Smooth day/night terminator wrap across Earth's atmosphere
 					float daylight = smoothstep(-0.15, 0.25, NdotL);
-					// Subtle ambient starlight (0.12) keeping night side oceans and continents recognizable
-					float lighting = mix(0.12, 1.0, daylight);
 
 					// Sunlight warm tint on day side
 					vec3 sunColor = vec3(1.0, 0.98, 0.94);
-					vec3 color = texColor.rgb * mix(vec3(1.0), sunColor, daylight) * lighting;
+					vec3 dayColor = dayTex.rgb * sunColor;
+
+					// Night side with city lights and subtle ambient starlight
+					vec3 nightColor = nightTex.rgb + dayTex.rgb * 0.04;
+
+					// Smooth mask blend between illuminated day and shadowed night
+					vec3 color = mix(nightColor, dayColor, daylight);
 
 					// Atmospheric limb scattering: thin blue Rayleigh horizon haze where sun illuminates the atmosphere
 					vec3 V = normalize(vViewDirection);
@@ -1374,6 +1384,7 @@
 			earth.geometry.dispose();
 			earth.material.dispose();
 			earthTexture.dispose();
+			earthNightTexture.dispose();
 			scene.remove(celestialLine);
 			celestialLineGeometry.dispose();
 			celestialLineMat.dispose();
