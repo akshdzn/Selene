@@ -651,7 +651,7 @@
           type="range"
           class="scale-slider"
           min="1"
-          max="6"
+          max="12"
           step="0.1"
           bind:value={timelineScale}
           onpointerdown={(e) => e.stopPropagation()}
