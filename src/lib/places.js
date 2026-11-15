@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import { latLonToVector3, formatLatLon } from './ephemeris.js';
 import placesData from './Places.json' with { type: 'json' };
+import moonLandingSitesData from './moon_landing_sites.json' with { type: 'json' };
 
 /**
  * Creates a planar square ring (hollow square) geometry.
@@ -173,21 +174,24 @@ export function createPlaceMarkers(locations = placesData.locations, moonRadius 
 		markerGroup.add(hitMesh);
 
 		// 4. Position on lunar surface & orient tangent to surface normal
-		const surfacePos = latLonToVector3(loc.latitude, loc.longitude, moonRadius + 0.004);
+		const lat = loc.latitude ?? loc.lat;
+		const lon = loc.longitude ?? loc.lon;
+		const surfacePos = latLonToVector3(lat, lon, moonRadius + 0.004);
 		markerGroup.position.copy(surfacePos);
 
 		const normal = surfacePos.clone().normalize();
 		const UP_Z = new THREE.Vector3(0, 0, 1);
 		markerGroup.quaternion.setFromUnitVectors(UP_Z, normal);
 
-		const coordsFormat = formatLatLon(loc.latitude, loc.longitude);
+		const coordsFormat = formatLatLon(lat, lon);
 
 		// Store place metadata in userData
 		const placeData = {
+			...loc,
 			name: loc.name,
 			type: loc.type,
-			latitude: loc.latitude,
-			longitude: loc.longitude,
+			latitude: lat,
+			longitude: lon,
 			diameter_km: loc.diameter_km,
 			coordsStr: coordsFormat.full,
 			markerGroup,
@@ -294,14 +298,15 @@ export function updatePlaceMarkersAnimation(markers, time, hoveredPlace) {
 				m.markerMesh.material.color.setHex(0xffffff);
 				m.markerMesh.material.opacity = 0.92;
 			}
+			const latVal = m.latitude ?? m.lat ?? 0;
 			if (m.ringMesh) {
-				const pulse = 0.65 + 0.20 * Math.sin(time * 2.5 + m.latitude * 0.1);
+				const pulse = 0.65 + 0.20 * Math.sin(time * 2.5 + latVal * 0.1);
 				m.ringMesh.material.color.setHex(0x33e5ff); // Electric cyan
 				m.ringMesh.material.emissive?.setHex(0x0077aa);
 				m.ringMesh.material.emissiveIntensity = pulse;
 			}
 			if (m.bracketsMesh) {
-				const pulse = 0.65 + 0.20 * Math.sin(time * 2.5 + m.latitude * 0.1);
+				const pulse = 0.65 + 0.20 * Math.sin(time * 2.5 + latVal * 0.1);
 				m.bracketsMesh.material.color.setHex(0x99f3ff);
 				m.bracketsMesh.material.emissive?.setHex(0x22aacc);
 				m.bracketsMesh.material.emissiveIntensity = pulse * 1.2;
@@ -312,4 +317,58 @@ export function updatePlaceMarkersAnimation(markers, time, hoveredPlace) {
 	}
 }
 
-export { placesData };
+/**
+ * Filters and formats historic lunar landing sites from moon_landing_sites.json.
+ * Only includes Apollo (crewed) and Chandrayaan missions.
+ * Excludes Surveyors and commercial rovers as specified.
+ *
+ * @param {object} jsonData Raw data from moon_landing_sites.json
+ * @returns {Array} Array of landing site objects formatted for place markers
+ */
+export function getHistoricLandingSites(jsonData = moonLandingSitesData) {
+	const sites = jsonData?.sites || jsonData || [];
+	return sites
+		.filter((site) => {
+			const name = (site.name || '').toLowerCase();
+			// Explicitly exclude Surveyors
+			if (name.includes('surveyor')) return false;
+			// Explicitly exclude commercial rovers/landers (Intuitive Machines, Firefly, etc.)
+			if (
+				name.includes('odysseus') ||
+				name.includes('blue ghost') ||
+				name.includes('athena')
+			) {
+				return false;
+			}
+			// Only include Apollo and Chandrayaan missions
+			return name.includes('apollo') || name.includes('chandrayaan');
+		})
+		.map((site) => {
+			const typeMap = {
+				crewed_landing: 'Crewed Lunar Landing',
+				robotic_landing: 'Robotic Lunar Landing',
+				crash: 'Lunar Impact Probe / Lander'
+			};
+			const typeDesc = typeMap[site.type] || 'Lunar Landing Site';
+			const fullType = site.note
+				? `${typeDesc} (${site.note})`
+				: `${typeDesc} · ${site.country}`;
+
+			return {
+				name: site.name,
+				country: site.country,
+				type: fullType,
+				rawType: site.type,
+				latitude: site.lat,
+				longitude: site.lon,
+				lat: site.lat,
+				lon: site.lon,
+				date: site.date,
+				note: site.note || '',
+				left_behind: site.left_behind || [],
+				isLandingSite: true
+			};
+		});
+}
+
+export { placesData, moonLandingSitesData };

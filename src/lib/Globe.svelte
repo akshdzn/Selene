@@ -9,7 +9,13 @@
 	import earthUrl from '../assets/earth.jpg';
 	import markerSvgUrl from '../assets/Marker.svg';
 	import placesData from './Places.json' with { type: 'json' };
-	import { createPlaceMarkers, checkPlaceHover, updatePlaceMarkersAnimation } from './places.js';
+	import landingSitesData from './moon_landing_sites.json' with { type: 'json' };
+	import {
+		createPlaceMarkers,
+		checkPlaceHover,
+		updatePlaceMarkersAnimation,
+		getHistoricLandingSites
+	} from './places.js';
 
 	let {
 		lunarPositions = null,
@@ -1014,6 +1020,19 @@
 		} = createPlaceMarkers(placesData.locations, 1.0, markerTexture);
 		scene.add(placesGroup);
 
+		// 11. Markers for Moon Landing Sites (Apollo and Chandrayaan only)
+		const historicLandingSites = getHistoricLandingSites(landingSitesData);
+		const {
+			containerGroup: landingSitesGroup,
+			markers: landingMarkers,
+			hitMeshes: landingHitMeshes,
+			dispose: disposeLandingSites
+		} = createPlaceMarkers(historicLandingSites, 1.0, markerTexture);
+		scene.add(landingSitesGroup);
+
+		const allPlaceMarkers = [...placeMarkers, ...landingMarkers];
+		const allPlaceHitMeshes = [...placeHitMeshes, ...landingHitMeshes];
+
 		const raycaster = new THREE.Raycaster();
 		const mouse = new THREE.Vector2(-1000, -1000);
 		const cursorNormal = new THREE.Vector3();
@@ -1053,7 +1072,7 @@
 			mouse.y = -((e.clientY - rect.top) / rect.height) * 2 + 1;
 			raycaster.setFromCamera(mouse, camera);
 
-			const placeHit = checkPlaceHover(raycaster, placeHitMeshes, camera);
+			const placeHit = checkPlaceHover(raycaster, allPlaceHitMeshes, camera);
 			if (placeHit) {
 				e.preventDefault();
 				e.stopPropagation();
@@ -1080,7 +1099,7 @@
 			raycaster.setFromCamera(mouse, camera);
 
 			// Check if a place marker was clicked
-			const placeHit = checkPlaceHover(raycaster, placeHitMeshes, camera);
+			const placeHit = checkPlaceHover(raycaster, allPlaceHitMeshes, camera);
 			if (placeHit) {
 				e.preventDefault();
 				e.stopPropagation();
@@ -1178,7 +1197,7 @@
 			let currentHovered = null;
 			if (hasPointer) {
 				raycaster.setFromCamera(mouse, camera);
-				currentHovered = checkPlaceHover(raycaster, placeHitMeshes, camera);
+				currentHovered = checkPlaceHover(raycaster, allPlaceHitMeshes, camera);
 
 				if (currentHovered) {
 					hoveredPlace = currentHovered;
@@ -1186,7 +1205,7 @@
 					const screenX = (proj.x * 0.5 + 0.5) * container.clientWidth;
 					const screenY = (-proj.y * 0.5 + 0.5) * container.clientHeight;
 
-					const marginX = 140;
+					const marginX = 160;
 					const clampedX = Math.max(marginX, Math.min(container.clientWidth - marginX, screenX));
 					const isNearTop = screenY < 90;
 					const clampedY = isNearTop ? screenY + 28 : screenY - 24;
@@ -1229,7 +1248,7 @@
 			}
 
 			const time = (timestamp || performance.now()) * 0.001;
-			updatePlaceMarkersAnimation(placeMarkers, time, currentHovered);
+			updatePlaceMarkersAnimation(allPlaceMarkers, time, currentHovered);
 
 			// Realistic Earth axial rotation driven by lunar ephemeris dataset + natural planetary spin
 			currentEarthRotation = THREE.MathUtils.lerp(currentEarthRotation, targetEarthRotation, 0.12);
@@ -1259,6 +1278,8 @@
 			renderer.dispose();
 			scene.remove(placesGroup);
 			disposePlaces();
+			scene.remove(landingSitesGroup);
+			disposeLandingSites();
 			markerTexture.dispose();
 			controls.dispose();
 			renderer.dispose();

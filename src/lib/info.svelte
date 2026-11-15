@@ -45,6 +45,10 @@
 				{
 					name: 'Known Lunar Landmarks',
 					desc: '8 prominent Maria and mountain ranges.'
+				},
+				{
+					name: 'Historic Lunar Landing Sites',
+					desc: 'Apollo and Chandrayaan landing sites with interactive surface targeting reticles.'
 				}
 			]
 		},
