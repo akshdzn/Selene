@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { convertToDirectionalCoords } from '../src/lib/ephemeris.js';
+import { convertToDirectionalCoords, parseCoordinateInput } from '../src/lib/ephemeris.js';
 
 console.log('Testing LunarCoordsHUD coordinate calculation & display logic...');
 
@@ -73,5 +73,33 @@ selectedCoordsVar = { lat: -20.590, lon: -17.290 };
 assert.equal(getDisplayedCoordinates(selectedCoordsVar, hoveredCoordsVar).latStr, '20.590° S');
 assert.equal(getDisplayedCoordinates(selectedCoordsVar, hoveredCoordsVar).lonStr, '17.290° W');
 console.log('✔ Verified display updates when new point is picked.');
+
+// Test 5: Typing/Editing coordinate strings parser logic (decimal degrees & directional notation)
+console.log('Testing Coordinate Typing & Parser Logic...');
+assert.equal(parseCoordinateInput('26.1322', true), 26.1322);
+assert.equal(parseCoordinateInput('-14.500', true), -14.5);
+assert.equal(parseCoordinateInput('26.132° N', true), 26.132);
+assert.equal(parseCoordinateInput('47.770° S', true), -47.77);
+assert.equal(parseCoordinateInput('47.770s', true), -47.77);
+assert.equal(parseCoordinateInput('0.674 n', true), 0.674);
+
+assert.equal(parseCoordinateInput('3.6339', false), 3.6339);
+assert.equal(parseCoordinateInput('-23.422', false), -23.422);
+assert.equal(parseCoordinateInput('126.680° E', false), 126.68);
+assert.equal(parseCoordinateInput('94.931° W', false), -94.931);
+assert.equal(parseCoordinateInput('94.931w', false), -94.931);
+assert.equal(parseCoordinateInput('23.473 e', false), 23.473);
+
+// Boundary clamping
+assert.equal(parseCoordinateInput('115.5', true), 90);
+assert.equal(parseCoordinateInput('-95.2', true), -90);
+assert.equal(parseCoordinateInput('250.0', false), 180);
+assert.equal(parseCoordinateInput('-195.0', false), -180);
+
+// Invalid input
+assert.equal(parseCoordinateInput('', true), null);
+assert.equal(parseCoordinateInput('abc', true), null);
+assert.equal(parseCoordinateInput(null, true), null);
+console.log('✔ Verified coordinate parsing for typed inputs (decimal, directions N/S/E/W, boundary clamping).');
 
 console.log('\nALL LUNAR COORDS HUD LOGIC CHECKS PASSED SUCCESSFULLY!');

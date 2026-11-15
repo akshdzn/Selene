@@ -184,6 +184,7 @@
       {hoveredCoords}
       {lat}
       {lon}
+      onCoordinateSelect={handleCoordinateSelect}
     />
 
     {#if isCalculatingEphemeris}

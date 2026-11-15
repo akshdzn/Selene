@@ -1,19 +1,40 @@
 <script>
-  import { onMount } from 'svelte';
-  import { convertToDirectionalCoords } from './ephemeris.js';
+  import { onMount, tick } from 'svelte';
+  import { convertToDirectionalCoords, parseCoordinateInput } from './ephemeris.js';
 
   let {
     selectedCoords = null,
     hoveredCoords = null,
     lat = 26.1322,
-    lon = 3.6339
+    lon = 3.6339,
+    onCoordinateSelect = null
   } = $props();
 
   let isDropdownOpen = $state(false);
+  let isEditing = $state(false);
+  let editLatInput = $state('');
+  let editLonInput = $state('');
+  let hasInputError = $state(false);
+
+  let latInputEl = $state(null);
+  let lonInputEl = $state(null);
+  let hudBoxEl = $state(null);
 
   // 1. When a coordinate is selected, the above coordinates should ONLY display that coordinate (using selectedCoords).
   // 2. When no coordinate is selected yet, read latitude and longitude from the mouse cursor location (hoveredCoords).
   // 3. Before any clicks or mouse hover happen on the CoordsHUD, show lat (26.1322) and lon (3.6339) as the initial value.
+  let currentLatNum = $derived.by(() => {
+    if (selectedCoords && typeof selectedCoords.lat === 'number') return selectedCoords.lat;
+    if (hoveredCoords && typeof hoveredCoords.lat === 'number') return hoveredCoords.lat;
+    return typeof lat === 'number' ? lat : 26.1322;
+  });
+
+  let currentLonNum = $derived.by(() => {
+    if (selectedCoords && typeof selectedCoords.lon === 'number') return selectedCoords.lon;
+    if (hoveredCoords && typeof hoveredCoords.lon === 'number') return hoveredCoords.lon;
+    return typeof lon === 'number' ? lon : 3.6339;
+  });
+
   let displayCoords = $derived.by(() => {
     if (selectedCoords && typeof selectedCoords.lat === 'number' && typeof selectedCoords.lon === 'number') {
       return convertToDirectionalCoords(selectedCoords.lat, selectedCoords.lon, { precision: 3, space: ' ' });
@@ -38,42 +59,211 @@
     return 'DEFAULT TELEMETRY';
   });
 
+  async function startEditing(targetField = 'lat') {
+    isEditing = true;
+    hasInputError = false;
+    editLatInput = currentLatNum.toFixed(4);
+    editLonInput = currentLonNum.toFixed(4);
+
+    await tick();
+    if (targetField === 'lon' && lonInputEl) {
+      lonInputEl.focus();
+      lonInputEl.select();
+    } else if (latInputEl) {
+      latInputEl.focus();
+      latInputEl.select();
+    }
+  }
+
+  function commitEditing() {
+    if (!isEditing) return;
+
+    let parsedLat = null;
+    let parsedLon = null;
+
+    // Check if user entered or pasted a comma-separated coordinate pair into either field
+    if (editLatInput.includes(',')) {
+      const parts = editLatInput.split(',');
+      parsedLat = parseCoordinateInput(parts[0], true);
+      parsedLon = parseCoordinateInput(parts[1], false);
+    } else if (editLonInput.includes(',')) {
+      const parts = editLonInput.split(',');
+      parsedLat = parseCoordinateInput(parts[0], true);
+      parsedLon = parseCoordinateInput(parts[1], false);
+    } else {
+      parsedLat = parseCoordinateInput(editLatInput, true);
+      parsedLon = parseCoordinateInput(editLonInput, false);
+    }
+
+    if (parsedLat === null || parsedLon === null) {
+      hasInputError = true;
+      return;
+    }
+
+    hasInputError = false;
+    isEditing = false;
+    onCoordinateSelect?.({ lat: parsedLat, lon: parsedLon });
+  }
+
+  function cancelEditing() {
+    isEditing = false;
+    hasInputError = false;
+  }
+
+  function handleInputKeydown(e) {
+    if (e.key === 'Enter') {
+      e.preventDefault();
+      commitEditing();
+    } else if (e.key === 'Escape') {
+      e.preventDefault();
+      cancelEditing();
+    }
+  }
+
   function handleKeydown(e) {
-    if (e.key === 'Escape' && isDropdownOpen) {
-      isDropdownOpen = false;
+    if (e.key === 'Escape') {
+      if (isEditing) {
+        cancelEditing();
+      } else if (isDropdownOpen) {
+        isDropdownOpen = false;
+      }
+    }
+  }
+
+  function handlePointerDown(e) {
+    if (isEditing && hudBoxEl && !hudBoxEl.contains(e.target)) {
+      commitEditing();
     }
   }
 
   onMount(() => {
     window.addEventListener('keydown', handleKeydown);
+    window.addEventListener('pointerdown', handlePointerDown);
     return () => {
       window.removeEventListener('keydown', handleKeydown);
+      window.removeEventListener('pointerdown', handlePointerDown);
     };
   });
 </script>
 
 <!-- Lunar Coordinates HUD (Figma node 49:9) -->
 <div class="lunar-hud-container" data-node-id="49:9">
-  <!-- Frosted Coordinates Box (node 47:2) -->
-  <div class="lunar-hud-box" data-node-id="47:2">
+  <!-- Frosted Coordinates Box (node 47:2) with Double-Click To Edit -->
+  <div
+    bind:this={hudBoxEl}
+    class="lunar-hud-box"
+    class:is-editing={isEditing}
+    class:has-error={hasInputError}
+    data-node-id="47:2"
+    role="region"
+    aria-label="Lunar coordinates HUD"
+    title={isEditing ? 'Press Enter to apply, Esc to cancel' : 'Double-click to type coordinates'}
+  >
     <!-- Left: Latitude (node 47:6) -->
-    <div class="coord-col coord-col-left">
-      <span class="coord-value" data-node-id="47:6">{displayCoords.latStr}</span>
+    <div
+      class="coord-col coord-col-left"
+      role="button"
+      tabindex={isEditing ? -1 : 0}
+      aria-label="Latitude coordinate: double click to edit"
+      ondblclick={(e) => {
+        e.stopPropagation();
+        startEditing('lat');
+      }}
+      onkeydown={(e) => {
+        if (!isEditing && (e.key === 'Enter' || e.key === ' ')) {
+          e.preventDefault();
+          startEditing('lat');
+        }
+      }}
+    >
+      {#if isEditing}
+        <input
+          bind:this={latInputEl}
+          type="text"
+          class="coord-input coord-input-left"
+          bind:value={editLatInput}
+          onkeydown={handleInputKeydown}
+          placeholder="26.1322"
+          aria-label="Latitude coordinate"
+          spellcheck="false"
+        />
+      {:else}
+        <span class="coord-value" data-node-id="47:6">{displayCoords.latStr}</span>
+      {/if}
     </div>
 
     <!-- Center Divider (node 47:5) -->
     <div class="hud-divider" data-node-id="47:5"></div>
 
     <!-- Right: Longitude (node 47:7) -->
-    <div class="coord-col coord-col-right">
-      <span class="coord-value" data-node-id="47:7">{displayCoords.lonStr}</span>
+    <div
+      class="coord-col coord-col-right"
+      role="button"
+      tabindex={isEditing ? -1 : 0}
+      aria-label="Longitude coordinate: double click to edit"
+      ondblclick={(e) => {
+        e.stopPropagation();
+        startEditing('lon');
+      }}
+      onkeydown={(e) => {
+        if (!isEditing && (e.key === 'Enter' || e.key === ' ')) {
+          e.preventDefault();
+          startEditing('lon');
+        }
+      }}
+    >
+      {#if isEditing}
+        <input
+          bind:this={lonInputEl}
+          type="text"
+          class="coord-input coord-input-right"
+          bind:value={editLonInput}
+          onkeydown={handleInputKeydown}
+          placeholder="3.6339"
+          aria-label="Longitude coordinate"
+          spellcheck="false"
+        />
+      {:else}
+        <span class="coord-value" data-node-id="47:7">{displayCoords.lonStr}</span>
+      {/if}
     </div>
+
+    {#if isEditing}
+      <div class="edit-actions-bar">
+        <button
+          type="button"
+          class="edit-action-btn edit-action-confirm"
+          onclick={(e) => {
+            e.stopPropagation();
+            commitEditing();
+          }}
+          title="Apply coordinates (Enter)"
+          aria-label="Apply coordinates"
+        >
+          ✓
+        </button>
+        <button
+          type="button"
+          class="edit-action-btn edit-action-cancel"
+          onclick={(e) => {
+            e.stopPropagation();
+            cancelEditing();
+          }}
+          title="Cancel (Esc)"
+          aria-label="Cancel editing"
+        >
+          ✕
+        </button>
+      </div>
+    {/if}
   </div>
 
   <!-- Bottom Labels & Arrow Button Row -->
   <div class="lunar-hud-labels">
     <!-- Latitude Label (node 47:3) -->
-    <span class="hud-label hud-label-lat" data-node-id="47:3">LATITUDE</span>
+    <span class="hud-label hud-label-lat" data-node-id="47:3">
+      {isEditing ? 'LAT (-90°..90°)' : 'LATITUDE'}
+    </span>
 
     <!-- Arrow Button (node 49:6) -->
     <button
@@ -103,7 +293,9 @@
     </button>
 
     <!-- Longitudinal Label (node 47:4) -->
-    <span class="hud-label hud-label-lon" data-node-id="47:4">LONGITUDINAL</span>
+    <span class="hud-label hud-label-lon" data-node-id="47:4">
+      {isEditing ? 'LON (-180°..180°)' : 'LONGITUDINAL'}
+    </span>
   </div>
 
   <!-- Telemetry Dropdown Menu -->
@@ -185,6 +377,24 @@
     align-items: center;
     position: relative;
     box-sizing: border-box;
+    cursor: pointer;
+    transition: background 0.2s ease, border-color 0.2s ease, box-shadow 0.2s ease;
+  }
+
+  .lunar-hud-box:hover:not(.is-editing) {
+    background: rgba(255, 255, 255, 0.14);
+  }
+
+  .lunar-hud-box.is-editing {
+    background: rgba(14, 20, 32, 0.55);
+    border: 1px solid rgba(255, 255, 255, 0.4);
+    box-shadow: 0 0 20px rgba(0, 160, 255, 0.25), inset 0 0 12px rgba(255, 255, 255, 0.08);
+    cursor: default;
+  }
+
+  .lunar-hud-box.has-error {
+    border-color: rgba(255, 80, 80, 0.7);
+    box-shadow: 0 0 18px rgba(255, 60, 60, 0.35);
   }
 
   .coord-col {
@@ -193,6 +403,7 @@
     display: flex;
     align-items: center;
     box-sizing: border-box;
+    cursor: pointer;
   }
 
   .coord-col-left {
@@ -213,6 +424,93 @@
     line-height: normal;
     white-space: nowrap;
     letter-spacing: 0.5px;
+  }
+
+  /* Coordinate Inputs when editing */
+  .coord-input {
+    width: 100%;
+    height: 100%;
+    background: transparent;
+    border: none;
+    outline: none;
+    font-family: 'Space Grotesk', -apple-system, BlinkMacSystemFont, sans-serif;
+    font-weight: 500;
+    font-size: 22px;
+    color: #ffffff;
+    line-height: normal;
+    letter-spacing: 0.5px;
+    box-sizing: border-box;
+    padding: 0;
+  }
+
+  .coord-input-left {
+    text-align: left;
+    padding-left: 0;
+  }
+
+  .coord-input-right {
+    text-align: right;
+    padding-right: 0;
+  }
+
+  .coord-input::placeholder {
+    color: rgba(255, 255, 255, 0.35);
+  }
+
+  .coord-input:focus {
+    color: #fffbdf;
+    text-shadow: 0 0 10px rgba(255, 220, 100, 0.4);
+  }
+
+  /* Action buttons when editing */
+  .edit-actions-bar {
+    position: absolute;
+    right: -66px;
+    top: 50%;
+    transform: translateY(-50%);
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    animation: fadeIn 0.15s ease-out;
+  }
+
+  .edit-action-btn {
+    width: 28px;
+    height: 28px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border: 1px solid rgba(255, 255, 255, 0.3);
+    background: rgba(10, 14, 24, 0.85);
+    backdrop-filter: blur(8px);
+    -webkit-backdrop-filter: blur(8px);
+    font-size: 13px;
+    font-family: sans-serif;
+    cursor: pointer;
+    border-radius: 3px;
+    transition: all 0.15s ease;
+  }
+
+  .edit-action-confirm {
+    color: #4ade80;
+    border-color: rgba(74, 222, 128, 0.5);
+  }
+
+  .edit-action-confirm:hover {
+    background: rgba(74, 222, 128, 0.25);
+    border-color: #4ade80;
+    transform: scale(1.08);
+  }
+
+  .edit-action-cancel {
+    color: #f87171;
+    border-color: rgba(248, 113, 113, 0.5);
+  }
+
+  .edit-action-cancel:hover {
+    background: rgba(248, 113, 113, 0.25);
+    border-color: #f87171;
+    transform: scale(1.08);
   }
 
   /* Vertical Divider: 2px wide, 58px tall */
@@ -305,13 +603,11 @@
     box-sizing: border-box;
     margin-top: 10px;
     padding: 16px 20px 20px 20px;
-    /* Translucent dark glass backdrop allowing lunar surface and stars behind to remain clearly visible */
     background: linear-gradient(
       180deg,
       rgba(10, 14, 24, 0.62) 0%,
       rgba(6, 9, 18, 0.52) 100%
     );
-    /* Frosted glass blur & saturation to smooth high-frequency background noise and ensure readability */
     backdrop-filter: blur(16px) saturate(160%) brightness(1.05);
     -webkit-backdrop-filter: blur(16px) saturate(160%) brightness(1.05);
     border: 1px solid rgba(255, 255, 255, 0.16);
@@ -530,6 +826,15 @@
     50% {
       opacity: 0.45;
       transform: scale(0.85);
+    }
+  }
+
+  @keyframes fadeIn {
+    from {
+      opacity: 0;
+    }
+    to {
+      opacity: 1;
     }
   }
 </style>

@@ -240,6 +240,45 @@ export function convertToDirectionalCoords(lat, lon, options = {}) {
 }
 
 /**
+ * Parses user-typed coordinate strings into signed decimal numbers.
+ * Supports decimal degrees ("26.1322", "-14.5") and directional notation ("26.132° N", "14.5S", "45.2° W").
+ *
+ * @param {string|number} input Raw coordinate input
+ * @param {boolean} [isLatitude=true] True if parsing latitude (-90 to +90), false for longitude (-180 to +180)
+ * @returns {number|null} Parsed coordinate rounded to 4 decimals, or null if invalid
+ */
+export function parseCoordinateInput(input, isLatitude = true) {
+  if (input === null || input === undefined) return null;
+  const s = String(input).trim();
+  if (!s) return null;
+
+  const upper = s.toUpperCase();
+  const hasSouth = upper.includes('S');
+  const hasNorth = upper.includes('N');
+  const hasWest = upper.includes('W');
+  const hasEast = upper.includes('E');
+
+  // Match numbers (integer or floating point, optional leading sign)
+  const match = s.match(/[-+]?\d*\.?\d+/);
+  if (!match) return null;
+
+  let val = parseFloat(match[0]);
+  if (isNaN(val)) return null;
+
+  if (isLatitude) {
+    if (hasSouth) val = -Math.abs(val);
+    else if (hasNorth) val = Math.abs(val);
+    val = Math.max(-90, Math.min(90, val));
+  } else {
+    if (hasWest) val = -Math.abs(val);
+    else if (hasEast) val = Math.abs(val);
+    val = Math.max(-180, Math.min(180, val));
+  }
+
+  return Number(val.toFixed(4));
+}
+
+/**
  * Convenience helper to convert a place object (e.g. from Places.json).
  *
  * @param {object} place Place object with latitude and longitude properties
