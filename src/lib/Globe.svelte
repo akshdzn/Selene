@@ -1058,6 +1058,17 @@
 				e.preventDefault();
 				e.stopPropagation();
 				onCoordinateSelect?.({ lat: placeHit.latitude, lon: placeHit.longitude });
+				return;
+			}
+
+			const intersects = raycaster.intersectObject(moon);
+			if (intersects.length > 0) {
+				e.preventDefault();
+				e.stopPropagation();
+				const hitPoint = intersects[0].point;
+				const norm = hitPoint.clone().normalize();
+				const { lat, lon } = vector3ToLatLon(norm);
+				onCoordinateSelect?.({ lat, lon });
 			}
 		}
 
@@ -1194,7 +1205,11 @@
 					cursor.position.copy(hitPoint).addScaledVector(cursorNormal, 0.003);
 					cursor.quaternion.setFromUnitVectors(UP_Z, cursorNormal);
 					const { lat, lon } = vector3ToLatLon(cursorNormal);
-					cursorCoords = formatLatLon(lat, lon);
+					cursorCoords = {
+						lat,
+						lon,
+						...formatLatLon(lat, lon)
+					};
 					onHoverCoords?.(cursorCoords);
 					const lineR = cursorLineThickness / 2;
 					line.scale.set(lineR, lineR, cursorLineLength);

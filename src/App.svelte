@@ -3,6 +3,7 @@
   import Globe from './lib/Globe.svelte';
   import LandingPage from './lib/landing.svelte';
   import Timeline from './lib/Timeline.svelte';
+  import LunarCoordsHUD from './lib/LunarCoordsHUD.svelte';
   import { fetchCurrentLunarPositions } from './lib/ephemeris.js';
 
   let showLanding = $state(true);
@@ -12,6 +13,7 @@
   // Apollo 15 landing site (Hadley-Apennine region: 26.1322°N, 3.6339°E)
   let lat = $state(26.1322);
   let lon = $state(3.6339);
+  let selectedCoords = $state(null);
   let lunarPositions = $state(null);
   let activeLunarPositions = $state(null);
   let ephemerisLoaded = $state(false);
@@ -31,6 +33,7 @@
     if (isCalculatingEphemeris) return;
     lat = Number(coords.lat.toFixed(4));
     lon = Number(coords.lon.toFixed(4));
+    selectedCoords = { lat, lon };
     isCalculatingEphemeris = true;
 
     try {
@@ -97,12 +100,20 @@
     <div class="view-layer globe-layer">
       <Globe
         lunarPositions={activeLunarPositions || lunarPositions}
-        selectedCoords={{ lat, lon }}
+        selectedCoords={selectedCoords || { lat, lon }}
         onCoordinateSelect={handleCoordinateSelect}
         onHoverCoords={(coords) => (hoveredCoords = coords)}
         isCalculating={isCalculatingEphemeris}
       />
     </div>
+
+    <!-- Lunar Coordinates HUD & Telemetry Popup (Figma node 49:9) -->
+    <LunarCoordsHUD
+      {selectedCoords}
+      {hoveredCoords}
+      {lat}
+      {lon}
+    />
 
     {#if isCalculatingEphemeris}
       <div class="ephemeris-loading-hud">
