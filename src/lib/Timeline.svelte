@@ -1,6 +1,6 @@
 <script>
   import { onMount, onDestroy } from 'svelte';
-  import { calculateCelestialPositions } from './ephemeris.js';
+  import { calculateCelestialPositions, calculateOptimalValue } from './ephemeris.js';
   import Scritto from "@scritto/svelte";
   import SubmitButton from './SubmitButton.svelte';
 
@@ -11,7 +11,8 @@
     onTimeChange = null,
     hoveredCoords = null,
     showSubmit = false,
-    onSubmit = () => {}
+    onSubmit = () => {},
+    optimalSample = null
   } = $props();
 
   // Reactive state
@@ -43,6 +44,31 @@
       currentPlayheadTime = sunList[currentPlayheadIndex]?.time || '';
     }
   });
+
+  // Optimal value calculations for Compare Mode
+  let sample1OptimalValue = $derived(
+    calculateOptimalValue(sunList, earthList)
+  );
+  let sample2OptimalValue = $derived(
+    calculateOptimalValue(sunListS2, earthListS2)
+  );
+
+  // Variable called Optimal Sample which gets input from the higher Optimal value between the two samples
+  let derivedOptimalSample = $derived.by(() => {
+    if (mode !== 'compare') return null;
+    if (!lunarPositions || !lunarPositionsS2) return null;
+    const v1 = sample1OptimalValue;
+    const v2 = sample2OptimalValue;
+    if (v1 <= 0 && v2 <= 0) return null;
+    // Check which sample is the optimal sample
+    return v1 >= v2 ? 1 : 2;
+  });
+
+  let activeOptimalSample = $derived(optimalSample ?? derivedOptimalSample);
+  let OptimalSample = $derived(activeOptimalSample);
+  let higherOptimalValue = $derived(
+    mode === 'compare' ? Math.max(sample1OptimalValue, sample2OptimalValue) : 0
+  );
 
   // Calculate contiguous intervals for each category
   function computeIntervals(sunArr, earthArr) {
@@ -658,7 +684,12 @@
         <!-- UPPER TIMELINE: SAMPLE 2 -->
         <div class="timeline-track-block s2-block">
           <div class="track-block-header">
-            <span class="track-tag s2-tag">SAMPLE 2</span>
+            <div class="track-tag-wrap">
+              <span class="track-tag s2-tag">SAMPLE 2</span>
+              {#if activeOptimalSample === 2}
+                <span class="optimal-sample-badge">OPTIMAL SAMPLE</span>
+              {/if}
+            </div>
             <span class="track-date-range">{s2DateRangeStr}</span>
           </div>
           {@render badgesContent(stackedBadgesS2, stackedEndIndicatorsS2, true)}
@@ -684,7 +715,12 @@
         <!-- LOWER TIMELINE: SAMPLE 1 -->
         <div class="timeline-track-block s1-block">
           <div class="track-block-header">
-            <span class="track-tag s1-tag">SAMPLE 1</span>
+            <div class="track-tag-wrap">
+              <span class="track-tag s1-tag">SAMPLE 1</span>
+              {#if activeOptimalSample === 1}
+                <span class="optimal-sample-badge">OPTIMAL SAMPLE</span>
+              {/if}
+            </div>
             <span class="track-date-range">{s1DateRangeStr}</span>
           </div>
           {@render badgesContent(stackedBadges, stackedEndIndicators, true)}
@@ -737,13 +773,19 @@
     <div class="bottom-left-group">
       {#if mode === 'compare'}
         <div class="bottom-left-time compare-times">
-          <div class="compare-time-pill s1-pill">
+          <div class="compare-time-pill s1-pill" class:is-optimal-pill={activeOptimalSample === 1}>
             <span class="pill-label">S1</span>
+            {#if activeOptimalSample === 1}
+              <span class="pill-optimal-tag">★ OPTIMAL</span>
+            {/if}
             <span>{formattedTime.dateStr}</span>
             <span>{formattedTime.timeStr}</span>
           </div>
-          <div class="compare-time-pill s2-pill">
+          <div class="compare-time-pill s2-pill" class:is-optimal-pill={activeOptimalSample === 2}>
             <span class="pill-label">S2</span>
+            {#if activeOptimalSample === 2}
+              <span class="pill-optimal-tag">★ OPTIMAL</span>
+            {/if}
             <span>{formattedTimeS2.dateStr}</span>
             <span>{formattedTimeS2.timeStr}</span>
           </div>
@@ -1305,5 +1347,41 @@
     font-size: 10px;
     font-weight: 900;
     opacity: 0.85;
+  }
+
+  .track-tag-wrap {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+
+  .optimal-sample-badge {
+    font-family: 'Jersey 25', sans-serif;
+    font-size: 13px;
+    letter-spacing: 1.2px;
+    color: #4ade80;
+    background: rgba(74, 222, 128, 0.18);
+    border: 1px solid rgba(74, 222, 128, 0.6);
+    border-radius: 2px;
+    padding: 1px 7px;
+    text-shadow: 0 0 8px rgba(74, 222, 128, 0.6);
+    box-shadow: 0 0 10px rgba(74, 222, 128, 0.25);
+    white-space: nowrap;
+    animation: fadeIn 0.25s ease-out;
+  }
+
+  .compare-time-pill.is-optimal-pill {
+    box-shadow: 0 0 10px rgba(74, 222, 128, 0.45);
+    border: 1px solid #ffffff;
+  }
+
+  .pill-optimal-tag {
+    font-size: 9.5px;
+    font-weight: 900;
+    letter-spacing: 0.5px;
+    background: rgba(0, 0, 0, 0.35);
+    color: #ffffff;
+    padding: 0px 4px;
+    border-radius: 2px;
   }
 </style>

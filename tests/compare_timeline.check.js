@@ -1,4 +1,5 @@
 import assert from 'node:assert';
+import { calculateOptimalValue, determineOptimalSample } from '../src/lib/ephemeris.js';
 
 // 1. Test Duration Matching Logic
 function getDaysDiff(d1Str, d2Str) {
@@ -92,5 +93,53 @@ assert.strictEqual(intvsS2.dark.length, 1, 'S2 should have 1 dark run');
 assert.strictEqual(intvsS2.dark[0].end, 1, 'S2 dark run ends at index 1');
 assert.strictEqual(intvsS2.power.length, 1, 'S2 should have 1 power step');
 assert.strictEqual(intvsS2.power[0].start, 2, 'S2 power step at 2');
+
+console.log('Testing Optimal Sample Determination Logic in Compare Mode...');
+
+// Scenario A: Sample 2 has higher Optimal value than Sample 1
+const s1Sun = [{ elevation: 5 }, { elevation: 5 }, { elevation: -10 }, { elevation: -10 }];
+const s1Earth = [{ elevation: 10 }, { elevation: 1 }, { elevation: 10 }, { elevation: 10 }];
+// Only index 0 is optimal in S1 (sun > 0 and earth > 2) -> 1 hour
+
+const s2Sun = [{ elevation: 5 }, { elevation: 5 }, { elevation: 5 }, { elevation: -10 }];
+const s2Earth = [{ elevation: 10 }, { elevation: 10 }, { elevation: 10 }, { elevation: 10 }];
+// Indices 0, 1, 2 are optimal in S2 -> 3 hours
+
+const optVal1 = calculateOptimalValue(s1Sun, s1Earth);
+const optVal2 = calculateOptimalValue(s2Sun, s2Earth);
+assert.strictEqual(optVal1, 1, 'Sample 1 optimal value should be 1');
+assert.strictEqual(optVal2, 3, 'Sample 2 optimal value should be 3');
+
+// Variable called Optimal Sample which gets input from the higher Optimal value between the two samples
+const resultA = determineOptimalSample(s1Sun, s1Earth, s2Sun, s2Earth);
+assert.strictEqual(resultA.higherOptimalValue, 3, 'Higher optimal value must be 3');
+assert.strictEqual(resultA.optimalSample, 2, 'Sample 2 must be the optimal sample');
+assert.strictEqual(resultA.OptimalSample, 2, 'OptimalSample variable must be 2');
+
+// Scenario B: Sample 1 has higher Optimal value than Sample 2
+const s1SunB = [{ elevation: 10 }, { elevation: 10 }, { elevation: 10 }, { elevation: 10 }];
+const s1EarthB = [{ elevation: 5 }, { elevation: 5 }, { elevation: 5 }, { elevation: 5 }];
+// All 4 indices optimal in S1 -> 4 hours
+
+const s2SunB = [{ elevation: 10 }, { elevation: 10 }, { elevation: -5 }, { elevation: -5 }];
+const s2EarthB = [{ elevation: 5 }, { elevation: 5 }, { elevation: 5 }, { elevation: 5 }];
+// 2 indices optimal in S2 -> 2 hours
+
+const resultB = determineOptimalSample(s1SunB, s1EarthB, s2SunB, s2EarthB);
+assert.strictEqual(resultB.higherOptimalValue, 4, 'Higher optimal value must be 4');
+assert.strictEqual(resultB.optimalSample, 1, 'Sample 1 must be the optimal sample');
+assert.strictEqual(resultB.OptimalSample, 1, 'OptimalSample variable must be 1');
+
+// Test display badge logic
+function getSampleBadge(sampleNumber, optimalSampleWinner) {
+  return sampleNumber === optimalSampleWinner ? 'OPTIMAL SAMPLE' : null;
+}
+
+assert.strictEqual(getSampleBadge(1, resultB.optimalSample), 'OPTIMAL SAMPLE', 'Sample 1 must display OPTIMAL SAMPLE next to sample number');
+assert.strictEqual(getSampleBadge(2, resultB.optimalSample), null, 'Sample 2 must not display OPTIMAL SAMPLE when Sample 1 is optimal');
+assert.strictEqual(getSampleBadge(2, resultA.optimalSample), 'OPTIMAL SAMPLE', 'Sample 2 must display OPTIMAL SAMPLE next to sample number');
+assert.strictEqual(getSampleBadge(1, resultA.optimalSample), null, 'Sample 1 must not display OPTIMAL SAMPLE when Sample 2 is optimal');
+
+console.log('✔ Optimal Sample comparison and badge display logic verified.');
 
 console.log('✔ All compare mode duration and timeline checks passed successfully!');

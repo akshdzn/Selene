@@ -1,7 +1,7 @@
 <script>
   import { onMount, tick } from 'svelte';
   import { Tabs, Combobox } from 'bits-ui';
-  import { convertToDirectionalCoords, parseCoordinateInput } from './ephemeris.js';
+  import { convertToDirectionalCoords, parseCoordinateInput, calculateOptimalValue } from './ephemeris.js';
   import { getLandmarkTypes, getLandmarksByType } from './places.js';
 
   let {
@@ -10,7 +10,10 @@
     lat = 26.1322,
     lon = 3.6339,
     onCoordinateSelect = null,
-    mode = $bindable('single')
+    mode = $bindable('single'),
+    lunarPositions = null,
+    lunarPositionsS2 = null,
+    optimalSample = null
   } = $props();
 
   let isDropdownOpen = $state(false);
@@ -34,6 +37,30 @@
     if (!selectedType) return [];
     return getLandmarksByType(selectedType);
   });
+
+  // Optimal calculations for Compare Mode
+  let sample1OptimalValue = $derived(
+    calculateOptimalValue(lunarPositions?.dataset?.sun, lunarPositions?.dataset?.earth)
+  );
+  let sample2OptimalValue = $derived(
+    calculateOptimalValue(lunarPositionsS2?.dataset?.sun, lunarPositionsS2?.dataset?.earth)
+  );
+
+  // Variable called Optimal Sample which gets input from the higher Optimal value between the two samples
+  let derivedOptimalSample = $derived.by(() => {
+    if (mode !== 'compare') return null;
+    if (!lunarPositions || !lunarPositionsS2) return null;
+    const v1 = sample1OptimalValue;
+    const v2 = sample2OptimalValue;
+    if (v1 <= 0 && v2 <= 0) return null;
+    return v1 >= v2 ? 1 : 2;
+  });
+
+  let activeOptimalSample = $derived(optimalSample ?? derivedOptimalSample);
+  let OptimalSample = $derived(activeOptimalSample);
+  let optimalSampleValue = $derived(
+    mode === 'compare' ? Math.max(sample1OptimalValue, sample2OptimalValue) : 0
+  );
 
   let latInputEl = $state(null);
   let lonInputEl = $state(null);
@@ -486,6 +513,58 @@
               </p>
             </div>
           {/if}
+        </Tabs.Content>
+
+        <Tabs.Content value="compare" class="tab-content">
+          <div class="compare-hud-section">
+            <div class="compare-hud-header">
+              <span class="compare-hud-title">MISSION WINDOW COMPARISON</span>
+              <span class="compare-hud-badge">COMPARE MODE</span>
+            </div>
+
+            <div class="compare-samples-grid">
+              <!-- Sample 1 Card -->
+              <div class="compare-sample-summary-card" class:is-optimal={activeOptimalSample === 1}>
+                <div class="summary-card-header">
+                  <span class="summary-sample-tag s1-tag">SAMPLE 1</span>
+                  {#if activeOptimalSample === 1}
+                    <span class="optimal-sample-badge">OPTIMAL SAMPLE</span>
+                  {/if}
+                </div>
+                <div class="summary-metric-row">
+                  <span class="metric-name">OPTIMAL WINDOW</span>
+                  <span class="metric-value">{sample1OptimalValue}h</span>
+                </div>
+              </div>
+
+              <!-- Sample 2 Card -->
+              <div class="compare-sample-summary-card" class:is-optimal={activeOptimalSample === 2}>
+                <div class="summary-card-header">
+                  <span class="summary-sample-tag s2-tag">SAMPLE 2</span>
+                  {#if activeOptimalSample === 2}
+                    <span class="optimal-sample-badge">OPTIMAL SAMPLE</span>
+                  {/if}
+                </div>
+                <div class="summary-metric-row">
+                  <span class="metric-name">OPTIMAL WINDOW</span>
+                  <span class="metric-value">{sample2OptimalValue}h</span>
+                </div>
+              </div>
+            </div>
+
+            {#if activeOptimalSample}
+              <div class="optimal-verdict-banner">
+                <span class="verdict-icon">★</span>
+                <span class="verdict-text">
+                  SAMPLE {activeOptimalSample} IS OPTIMAL WITH {optimalSampleValue}h OF SIMULTANEOUS POWER & COMMS
+                </span>
+              </div>
+            {:else}
+              <div class="compare-pending-notice">
+                <span>Select and calculate date ranges to evaluate optimal sample window.</span>
+              </div>
+            {/if}
+          </div>
         </Tabs.Content>
       </Tabs.Root>
     </div>
@@ -1166,32 +1245,161 @@
     max-width: 280px;
   }
 
-  /* Compare Mode Placeholder */
-  .compare-placeholder {
-    padding: 24px 16px;
-    text-align: center;
+  /* Compare Tab in HUD */
+  .compare-hud-section {
     display: flex;
     flex-direction: column;
+    gap: 10px;
+    width: 100%;
+  }
+
+  .compare-hud-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding-bottom: 6px;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.12);
+  }
+
+  .compare-hud-title {
+    font-family: 'Space Grotesk', sans-serif;
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: 1.1px;
+    color: rgba(255, 255, 255, 0.7);
+    text-transform: uppercase;
+  }
+
+  .compare-hud-badge {
+    font-family: 'Jersey 25', sans-serif;
+    font-size: 13px;
+    color: #ffaa55;
+    letter-spacing: 1px;
+  }
+
+  .compare-samples-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 8px;
+  }
+
+  .compare-sample-summary-card {
+    background: rgba(255, 255, 255, 0.05);
+    border: 1px solid rgba(255, 255, 255, 0.12);
+    border-radius: 3px;
+    padding: 10px;
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    box-sizing: border-box;
+    transition: all 0.2s ease;
+  }
+
+  .compare-sample-summary-card.is-optimal {
+    background: rgba(74, 222, 128, 0.12);
+    border-color: rgba(74, 222, 128, 0.6);
+    box-shadow: 0 0 12px rgba(74, 222, 128, 0.2);
+  }
+
+  .summary-card-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    flex-wrap: wrap;
+    gap: 4px;
+  }
+
+  .summary-sample-tag {
+    font-family: 'Jersey 25', sans-serif;
+    font-size: 12.5px;
+    letter-spacing: 1px;
+    padding: 1px 5px;
+    border-radius: 2px;
+  }
+
+  .summary-sample-tag.s1-tag {
+    background: rgba(255, 149, 0, 0.2);
+    color: #ffaa55;
+    border: 1px solid rgba(255, 149, 0, 0.4);
+  }
+
+  .summary-sample-tag.s2-tag {
+    background: rgba(0, 178, 255, 0.2);
+    color: #33e5ff;
+    border: 1px solid rgba(0, 178, 255, 0.4);
+  }
+
+  .optimal-sample-badge {
+    font-family: 'Jersey 25', sans-serif;
+    font-size: 12px;
+    letter-spacing: 1px;
+    color: #4ade80;
+    background: rgba(74, 222, 128, 0.18);
+    border: 1px solid rgba(74, 222, 128, 0.6);
+    border-radius: 2px;
+    padding: 1px 6px;
+    text-shadow: 0 0 8px rgba(74, 222, 128, 0.6);
+    box-shadow: 0 0 10px rgba(74, 222, 128, 0.25);
+    white-space: nowrap;
+    animation: fadeIn 0.25s ease-out;
+  }
+
+  .summary-metric-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-top: 2px;
+  }
+
+  .metric-name {
+    font-family: 'Space Grotesk', sans-serif;
+    font-size: 10.5px;
+    font-weight: 600;
+    color: rgba(255, 255, 255, 0.55);
+    letter-spacing: 0.6px;
+  }
+
+  .metric-value {
+    font-family: 'Space Grotesk', sans-serif;
+    font-size: 14px;
+    font-weight: 700;
+    color: #ffffff;
+  }
+
+  .optimal-verdict-banner {
+    display: flex;
     align-items: center;
     gap: 8px;
+    background: rgba(74, 222, 128, 0.15);
+    border: 1px solid rgba(74, 222, 128, 0.5);
+    border-radius: 3px;
+    padding: 8px 12px;
+    box-shadow: 0 0 10px rgba(74, 222, 128, 0.15);
+    animation: fadeIn 0.25s ease-out;
+  }
+
+  .verdict-icon {
+    color: #4ade80;
+    font-size: 14px;
+  }
+
+  .verdict-text {
+    font-family: 'Jersey 25', sans-serif;
+    font-size: 13.5px;
+    color: #4ade80;
+    letter-spacing: 1px;
+    line-height: 1.25;
+  }
+
+  .compare-pending-notice {
+    padding: 14px;
+    text-align: center;
     background: rgba(255, 255, 255, 0.03);
     border: 1px dashed rgba(255, 255, 255, 0.15);
     border-radius: 3px;
-  }
-
-  .compare-tag {
-    font-family: 'Jersey 25', sans-serif;
-    font-size: 16px;
-    color: #ffaa55;
-    letter-spacing: 1.2px;
-  }
-
-  .compare-desc {
-    margin: 0;
     font-family: 'Space Grotesk', sans-serif;
-    font-size: 12.5px;
-    color: rgba(255, 255, 255, 0.6);
-    line-height: 1.45;
+    font-size: 12px;
+    color: rgba(255, 255, 255, 0.5);
   }
 
   @keyframes dropdownSlideDown {

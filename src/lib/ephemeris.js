@@ -406,3 +406,52 @@ export async function fetchCurrentLunarPositions(lat = 0, lon = 0, customRange =
     };
   }
 }
+
+/**
+ * Calculates the total Optimal value (hours where solar elevation > 0 and earth elevation > 2)
+ * for an ephemeris dataset.
+ *
+ * @param {Array} sunArr Array of solar ephemeris entries
+ * @param {Array} earthArr Array of earth ephemeris entries
+ * @returns {number} Total hours of simultaneous power and communication
+ */
+export function calculateOptimalValue(sunArr, earthArr) {
+  if (!sunArr?.length || !earthArr?.length) return 0;
+  const n = Math.min(sunArr.length, earthArr.length);
+  let count = 0;
+  for (let i = 0; i < n; i++) {
+    const isPower = (sunArr[i]?.elevation ?? -15) > 0;
+    const isComms = (earthArr[i]?.elevation ?? -15) > 2;
+    if (isPower && isComms) count++;
+  }
+  return count;
+}
+
+/**
+ * Compares two sample datasets and determines the optimal sample based on higher Optimal value.
+ *
+ * @param {Array} sunArr1 Sample 1 sun array
+ * @param {Array} earthArr1 Sample 1 earth array
+ * @param {Array} sunArr2 Sample 2 sun array
+ * @param {Array} earthArr2 Sample 2 earth array
+ * @returns {{ optimalSample: number|null, OptimalSample: number|null, optimalValue: number, higherOptimalValue: number, sample1Value: number, sample2Value: number }}
+ */
+export function determineOptimalSample(sunArr1, earthArr1, sunArr2, earthArr2) {
+  const sample1Value = calculateOptimalValue(sunArr1, earthArr1);
+  const sample2Value = calculateOptimalValue(sunArr2, earthArr2);
+  const higherOptimalValue = Math.max(sample1Value, sample2Value);
+
+  let optimalSample = null;
+  if (sample1Value > 0 || sample2Value > 0) {
+    optimalSample = sample1Value >= sample2Value ? 1 : 2;
+  }
+
+  return {
+    optimalSample,
+    OptimalSample: optimalSample,
+    optimalValue: higherOptimalValue,
+    higherOptimalValue,
+    sample1Value,
+    sample2Value
+  };
+}

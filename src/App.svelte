@@ -5,7 +5,7 @@
   import Timeline from './lib/Timeline.svelte';
   import DatePicker from './lib/DatePicker.svelte';
   import LunarCoordsHUD from './lib/LunarCoordsHUD.svelte';
-  import { fetchCurrentLunarPositions } from './lib/ephemeris.js';
+  import { fetchCurrentLunarPositions, calculateOptimalValue } from './lib/ephemeris.js';
 
   let showLanding = $state(true);
   let showGlobe = $state(false);
@@ -107,6 +107,31 @@
       console.error('Failed to load Sample 2 ephemeris:', err);
     }
   }
+
+  // Optimal value calculations for Compare Mode
+  let sample1OptimalValue = $derived(
+    calculateOptimalValue(lunarPositions?.dataset?.sun, lunarPositions?.dataset?.earth)
+  );
+  let sample2OptimalValue = $derived(
+    calculateOptimalValue(lunarPositionsS2?.dataset?.sun, lunarPositionsS2?.dataset?.earth)
+  );
+
+  // Variable called Optimal Sample which gets input from the higher Optimal value between the two samples
+  let OptimalSample = $derived.by(() => {
+    if (mode !== 'compare' || isCalculatingEphemeris) return null;
+    if (!lunarPositions || !lunarPositionsS2) return null;
+    const v1 = sample1OptimalValue;
+    const v2 = sample2OptimalValue;
+    if (v1 <= 0 && v2 <= 0) return null;
+    // Check which sample is the optimal sample
+    return v1 >= v2 ? 1 : 2;
+  });
+
+  let optimalSample = $derived(OptimalSample);
+  let optimalSampleNumber = $derived(OptimalSample);
+  let higherOptimalValue = $derived(
+    mode === 'compare' ? Math.max(sample1OptimalValue, sample2OptimalValue) : 0
+  );
 
   $effect(() => {
     if (mode === 'compare') {
@@ -302,9 +327,11 @@
       </div>
     {:else}
       <!-- COMPARE MODE: Sample 1 on Left, Sample 2 on Right -->
-      <div class="hud-date-picker start-picker compare-sample-card">
+      <div class="hud-date-picker start-picker compare-sample-card" class:is-optimal-card={optimalSample === 1}>
         <div class="compare-card-header">
-          <span class="compare-tag s1-tag">SAMPLE 1</span>
+          <div class="compare-tag-wrap">
+            <span class="compare-tag s1-tag">SAMPLE 1</span>
+          </div>
           <span class="compare-duration">{s1DurationDays} DAYS</span>
         </div>
         <DatePicker
@@ -327,9 +354,14 @@
         />
       </div>
 
-      <div class="hud-date-picker end-picker compare-sample-card">
+      <div class="hud-date-picker end-picker compare-sample-card" class:is-optimal-card={optimalSample === 2}>
         <div class="compare-card-header align-right">
-          <span class="compare-tag s2-tag">SAMPLE 2</span>
+          <div class="compare-tag-wrap">
+            {#if optimalSample === 2}
+              <span class="optimal-sample-badge">OPTIMAL SAMPLE</span>
+            {/if}
+            <span class="compare-tag s2-tag">SAMPLE 2</span>
+          </div>
           <span class="compare-duration">{s1DurationDays} DAYS</span>
         </div>
         <DatePicker
@@ -358,6 +390,9 @@
       {lon}
       onCoordinateSelect={handleCoordinateSelect}
       bind:mode
+      {lunarPositions}
+      {lunarPositionsS2}
+      {optimalSample}
     />
 
     {#if isCalculatingEphemeris}
@@ -374,6 +409,7 @@
         {hoveredCoords}
         showSubmit={hasDateChanged}
         onSubmit={handleSubmitDateRange}
+        {optimalSample}
       />
     {/if}
   {/if}
@@ -464,6 +500,35 @@
     letter-spacing: 1.2px;
     padding: 3px 8px;
     text-transform: uppercase;
+  }
+
+  .compare-tag-wrap {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+
+  .optimal-sample-badge {
+    font-family: 'Jersey 25', sans-serif;
+    font-size: 13px;
+    letter-spacing: 1.2px;
+    color: #4ade80;
+    background: rgba(74, 222, 128, 0.16);
+    border: 1px solid rgba(74, 222, 128, 0.6);
+    border-radius: 2px;
+    padding: 1px 7px;
+    text-shadow: 0 0 8px rgba(74, 222, 128, 0.6);
+    box-shadow: 0 0 10px rgba(74, 222, 128, 0.25);
+    white-space: nowrap;
+    animation: fadeIn 0.25s ease-out;
+  }
+
+  .compare-sample-card.is-optimal-card {
+    border-color: rgba(74, 222, 128, 0.5);
+    box-shadow:
+      0 12px 32px rgba(0, 0, 0, 0.6),
+      0 0 16px rgba(74, 222, 128, 0.18),
+      inset 0 1px 0 rgba(255, 255, 255, 0.2);
   }
 
   .s1-tag {
