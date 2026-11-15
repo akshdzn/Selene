@@ -42,6 +42,7 @@
 	let outerCoronaRef;
 	let horizontalStreakRef;
 	let raySpritesRef = [];
+	let sunBloomRef;
 	let sunLightRef;
 	let earthMeshRef;
 	let selectedCursorRef;
@@ -63,6 +64,7 @@
 			sunMeshRef?.position.copy(positions.sunPos);
 			innerCoronaRef?.position.copy(positions.sunPos);
 			outerCoronaRef?.position.copy(positions.sunPos);
+			sunBloomRef?.position.copy(positions.sunPos);
 			horizontalStreakRef?.position.copy(positions.sunPos);
 			for (const ray of raySpritesRef) {
 				ray.position.copy(positions.sunPos);
@@ -117,6 +119,30 @@
 		gradient.addColorStop(0.48, 'rgba(255, 185, 110, 0.15)');
 		gradient.addColorStop(0.72, 'rgba(255, 145, 65, 0.04)');
 		gradient.addColorStop(1, 'rgba(0, 0, 0, 0)');
+
+		ctx.fillStyle = gradient;
+		ctx.fillRect(0, 0, 512, 512);
+
+		return new THREE.CanvasTexture(canvas);
+	}
+
+	// Expansive, smooth radial bloom texture mimicking HDR optical camera bloom (zero postprocessing overhead)
+	function createSunBloomTexture() {
+		const canvas = document.createElement('canvas');
+		canvas.width = 512;
+		canvas.height = 512;
+		const ctx = canvas.getContext('2d');
+
+		// Multi-stop inverse-exponential bloom gradient
+		const gradient = ctx.createRadialGradient(256, 256, 0, 256, 256, 256);
+		gradient.addColorStop(0, 'rgba(255, 255, 255, 1.0)');
+		gradient.addColorStop(0.08, 'rgba(255, 253, 245, 0.95)');
+		gradient.addColorStop(0.18, 'rgba(255, 242, 215, 0.75)');
+		gradient.addColorStop(0.32, 'rgba(255, 225, 175, 0.45)');
+		gradient.addColorStop(0.50, 'rgba(255, 200, 135, 0.20)');
+		gradient.addColorStop(0.72, 'rgba(255, 175, 95, 0.06)');
+		gradient.addColorStop(0.90, 'rgba(255, 150, 60, 0.015)');
+		gradient.addColorStop(1.0, 'rgba(0, 0, 0, 0)');
 
 		ctx.fillStyle = gradient;
 		ctx.fillRect(0, 0, 512, 512);
@@ -562,6 +588,7 @@
 		const BASE_STREAK_THICKNESS = 2.6;
 		const BASE_MAJOR_RAY_SCALE = 30;
 		const BASE_MINOR_RAY_SCALE = 23;
+		const BASE_STREAK_OPACITY = 0.70;
 		const initialFlareScale = flareLength * 0.75;
 
 		const streakTex = createLightScatteringStreakTexture();
@@ -571,10 +598,12 @@
 				blending: THREE.AdditiveBlending,
 				color: 0xfffaed, // exact project sun color
 				transparent: true,
-				opacity: 0.70,
+				opacity: BASE_STREAK_OPACITY,
+				depthTest: false,
 				depthWrite: false
 			})
 		);
+		horizontalStreak.renderOrder = 1;
 		horizontalStreak.position.copy(sunPos);
 		horizontalStreak.scale.set(BASE_STREAK_LENGTH * initialFlareScale, BASE_STREAK_THICKNESS * initialFlareScale, 1);
 		scene.add(horizontalStreak);
@@ -599,15 +628,39 @@
 					transparent: true,
 					opacity: rayOpacity,
 					rotation: angle,
+					depthTest: false,
 					depthWrite: false
 				})
 			);
+			raySprite.userData.baseOpacity = rayOpacity;
+			raySprite.renderOrder = 1;
 			raySprite.position.copy(sunPos);
 			raySprite.scale.set(rayScale, rayScale, 1);
 			scene.add(raySprite);
 			raySprites.push(raySprite);
 		}
 		raySpritesRef = raySprites;
+
+		// 5f. Procedural HDR Solar Bloom sprite (zero postprocessing overhead)
+		const BASE_BLOOM_SCALE = 32;
+		const BASE_BLOOM_OPACITY = 0.85;
+		const bloomTex = createSunBloomTexture();
+		const sunBloom = new THREE.Sprite(
+			new THREE.SpriteMaterial({
+				map: bloomTex,
+				blending: THREE.AdditiveBlending,
+				color: 0xfffaed,
+				transparent: true,
+				opacity: BASE_BLOOM_OPACITY,
+				depthTest: false,
+				depthWrite: false
+			})
+		);
+		sunBloom.renderOrder = 1;
+		sunBloom.position.copy(sunPos);
+		sunBloom.scale.set(BASE_BLOOM_SCALE * initialFlareScale, BASE_BLOOM_SCALE * initialFlareScale, 1);
+		scene.add(sunBloom);
+		sunBloomRef = sunBloom;
 
 		// Directional sunlight from the Sun's position to illuminate the Moon & reveal surface displacement
 		const sunLight = new THREE.DirectionalLight(0xfffaed, 2.8);
@@ -621,15 +674,65 @@
 		const ambientLight = new THREE.AmbientLight(0xffffff, 0.18);
 		scene.add(ambientLight);
 
-		// 6. Background Earth (distant unlit textured sphere)
+		// 6. Background Earth illuminated by directional sunlight
 		const earthTexture = textureLoader.load(earthUrl);
 		earthTexture.colorSpace = THREE.SRGBColorSpace;
 
+		const earthSunDir = new THREE.Vector3().subVectors(sunPos, earthPos).normalize();
+		const earthMaterial = new THREE.ShaderMaterial({
+			uniforms: {
+				uMap: { value: earthTexture },
+				uSunDirection: { value: earthSunDir }
+			},
+			vertexShader: /* glsl */`
+				varying vec2 vUv;
+				varying vec3 vWorldNormal;
+				varying vec3 vViewDirection;
+
+				void main() {
+					vUv = uv;
+					vec4 worldPos = modelMatrix * vec4(position, 1.0);
+					vWorldNormal = normalize(mat3(modelMatrix) * normal);
+					vViewDirection = normalize(cameraPosition - worldPos.xyz);
+					gl_Position = projectionMatrix * viewMatrix * worldPos;
+				}
+			`,
+			fragmentShader: /* glsl */`
+				uniform sampler2D uMap;
+				uniform vec3 uSunDirection;
+				varying vec2 vUv;
+				varying vec3 vWorldNormal;
+				varying vec3 vViewDirection;
+
+				void main() {
+					vec4 texColor = texture2D(uMap, vUv);
+					vec3 N = normalize(vWorldNormal);
+					float NdotL = dot(N, uSunDirection);
+
+					// Smooth day/night terminator wrap across Earth's atmosphere
+					float daylight = smoothstep(-0.15, 0.25, NdotL);
+					// Subtle ambient starlight (0.12) keeping night side oceans and continents recognizable
+					float lighting = mix(0.12, 1.0, daylight);
+
+					// Sunlight warm tint on day side
+					vec3 sunColor = vec3(1.0, 0.98, 0.94);
+					vec3 color = texColor.rgb * mix(vec3(1.0), sunColor, daylight) * lighting;
+
+					// Atmospheric limb scattering: thin blue Rayleigh horizon haze where sun illuminates the atmosphere
+					vec3 V = normalize(vViewDirection);
+					float rim = 1.0 - max(0.0, dot(V, N));
+					float atmosphere = pow(rim, 3.5) * max(0.0, NdotL + 0.1) * 0.65;
+					vec3 atmosphereColor = vec3(0.25, 0.55, 1.0);
+					color += atmosphereColor * atmosphere;
+
+					gl_FragColor = vec4(color, 1.0);
+				}
+			`
+		});
+
 		const earth = new THREE.Mesh(
 			new THREE.SphereGeometry(0.85, 48, 48),
-			new THREE.MeshBasicMaterial({
-				map: earthTexture
-			})
+			earthMaterial
 		);
 		earth.position.copy(earthPos);
 		earth.rotation.y = 1.2;
@@ -938,24 +1041,63 @@
 		window.addEventListener('resize', onResize);
 
 		// Render loop
+		const _toSun = new THREE.Vector3();
+		const _sunDir = new THREE.Vector3();
+
 		function animate(timestamp) {
 			animId = requestAnimationFrame(animate);
 			controls.update();
 			starSystem.update(camera);
 
-			// Dynamic flare scaling proportional to page zoom
+			// Calculate sun obstruction by the Moon (sphere of radius 1.0 at origin)
+			_toSun.subVectors(horizontalStreak.position, camera.position);
+			const sunDist = _toSun.length();
+			_sunDir.copy(_toSun).divideScalar(sunDist);
+
+			// Projection of vector from camera to moon center (which is -camera.position) onto sun direction
+			const t = -camera.position.dot(_sunDir);
+			let flareVisibility = 1.0;
+
+			if (t > 0 && t < sunDist) {
+				const camDistSq = camera.position.lengthSq();
+				const distSq = Math.max(0, camDistSq - t * t);
+				const dPerp = Math.sqrt(distSq);
+
+				// ponytail: occlusion radius (1.02) clears the Moon's displacement map peaks and prevents the flare center from rendering inside the lunar limb
+				const occlusionRadius = 1.02;
+				const sunRadius = 1.8;
+				const sunConeRadius = sunRadius * (t / sunDist);
+
+				const innerThreshold = occlusionRadius;
+				const outerThreshold = occlusionRadius + sunConeRadius;
+
+				flareVisibility = THREE.MathUtils.smoothstep(dPerp, innerThreshold, outerThreshold);
+			}
+
+			// Dynamic flare scaling proportional to page zoom and obstruction visibility
 			// Camera distance from Moon origin (0, 0, 0)
 			const camDist = camera.position.length();
 			// Linear mapping: at default distance (2.9) -> 0.75; at maxDistance (7.0) -> 1.0; at minDistance (1.3) -> ~0.65
 			const zoomProgress = (camDist - 2.9) / (controls.maxDistance - 2.9);
 			const zoomFactor = THREE.MathUtils.clamp(0.75 + zoomProgress * (1.0 - 0.75), 0.65, 1.0);
-			const currentFlareScale = flareLength * zoomFactor;
+			const currentFlareScale = flareLength * zoomFactor * flareVisibility;
+			const isVisible = flareVisibility > 0.0001;
 
+			horizontalStreak.visible = isVisible;
+			horizontalStreak.material.opacity = BASE_STREAK_OPACITY * flareVisibility;
 			horizontalStreak.scale.set(BASE_STREAK_LENGTH * currentFlareScale, BASE_STREAK_THICKNESS * currentFlareScale, 1);
 			for (let i = 0; i < raySprites.length; i++) {
+				const ray = raySprites[i];
+				ray.visible = isVisible;
+				ray.material.opacity = (ray.userData.baseOpacity ?? 0.3) * flareVisibility;
 				const baseRayScale = (i % 2 === 0) ? BASE_MAJOR_RAY_SCALE : BASE_MINOR_RAY_SCALE;
-				raySprites[i].scale.set(baseRayScale * currentFlareScale, baseRayScale * currentFlareScale, 1);
+				ray.scale.set(baseRayScale * currentFlareScale, baseRayScale * currentFlareScale, 1);
 			}
+
+			sunBloom.visible = isVisible;
+			sunBloom.material.opacity = BASE_BLOOM_OPACITY * flareVisibility;
+			const currentBloomScale = BASE_BLOOM_SCALE * currentFlareScale;
+			sunBloom.scale.set(currentBloomScale, currentBloomScale, 1);
 
 			let currentHovered = null;
 			if (hasPointer) {
@@ -1009,6 +1151,7 @@
 			const time = (timestamp || performance.now()) * 0.001;
 			updatePlaceMarkersAnimation(placeMarkers, time, currentHovered);
 
+			earthMaterial.uniforms.uSunDirection.value.subVectors(horizontalStreak.position, earth.position).normalize();
 			renderer.render(scene, camera);
 		}
 		animate();
@@ -1054,6 +1197,8 @@
 			innerCoronaTex.dispose();
 			outerCorona.material.dispose();
 			outerCoronaTex.dispose();
+			sunBloom.material.dispose();
+			bloomTex.dispose();
 			horizontalStreak.material.dispose();
 			streakTex.dispose();
 			beamTex.dispose();
