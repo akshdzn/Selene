@@ -519,6 +519,7 @@
 		const height = container.clientHeight;
 
 		// 1. Scene & Camera (focused on the Moon at origin)
+		//Maybe You Can See Lucy Somewhere.(If Only)
 		const scene = new THREE.Scene();
 		const camera = new THREE.PerspectiveCamera(45, width / height, 0.1, 1000);
 		camera.position.set(0, 0, 2.9);
@@ -690,7 +691,7 @@
 		sunBloom.scale.set(BASE_BLOOM_SCALE * initialFlareScale, BASE_BLOOM_SCALE * initialFlareScale, 1);
 		scene.add(sunBloom);
 		sunBloomRef = sunBloom;
-
+        //Then Mahadev Said Let There be light 
 		// Directional sunlight from the Sun's position to illuminate the Moon & reveal surface displacement
 		const sunLight = new THREE.DirectionalLight(0xfffaed, 2.8);
 		sunLight.position.copy(sunPos);
@@ -817,6 +818,7 @@
 		}
 
 		// 7. Hero Object: The Moon with displacement mapping and lighting
+		//I Couldnt Wait For You to Come And Clean The Cupboards
 		const moonTexture = textureLoader.load(moonUrl);
 		moonTexture.colorSpace = THREE.SRGBColorSpace;
 
@@ -1249,7 +1251,7 @@
 
 			const time = (timestamp || performance.now()) * 0.001;
 			updatePlaceMarkersAnimation(allPlaceMarkers, time, currentHovered);
-
+			//Spin That Shi Editor
 			// Realistic Earth axial rotation driven by lunar ephemeris dataset + natural planetary spin
 			currentEarthRotation = THREE.MathUtils.lerp(currentEarthRotation, targetEarthRotation, 0.12);
 			const liveSpin = (time - lastScrubTime) * 0.03;

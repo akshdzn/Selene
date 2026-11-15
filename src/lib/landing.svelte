@@ -233,6 +233,7 @@
 			historyPositions[0].copy(camera.position);
 
 			if (warpIntensity > 0 && flightDir) {
+				//Disney Pls No Sue we broke
 				// Hyperdrive mode during Earth -> Moon movement:
 				// 5x original star trail length and 4x original intensity
 				const trailStepLength = 17.5; // 5x original (3.5 * 5)
