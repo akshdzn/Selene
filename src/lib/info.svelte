@@ -11,6 +11,10 @@
 				{
 					name: 'Tidally-Locked Orbit',
 					desc: 'Accurately aligns Earth and the Moon based on real-time Horizons ephemeris data.'
+				},
+				{
+					name: 'Celestial Alignment Guide',
+					desc: 'Dashed visual vector connecting Earth, Moon, and Sun for rapid spatial orientation.'
 				}
 			]
 		},

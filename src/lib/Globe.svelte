@@ -47,6 +47,8 @@
 	let earthGroupRef;
 	let earthMeshRef;
 	let selectedCursorRef;
+	let celestialLineRef;
+	let celestialLineGeo;
 	let targetEarthRotation = 0;
 	let currentEarthRotation = 0;
 	let lastScrubTime = typeof performance !== 'undefined' ? performance.now() * 0.001 : 0;
@@ -82,6 +84,20 @@
 			earthGroupRef?.position.copy(positions.earthPos);
 			const { lat, lon } = vector3ToLatLon(positions.earthPos);
 			subEarthCoords = formatLatLon(lat, lon);
+		}
+		if (celestialLineGeo && celestialLineRef) {
+			const posAttr = celestialLineGeo.getAttribute('position');
+			if (posAttr) {
+				if (positions.earthPos) {
+					posAttr.setXYZ(0, positions.earthPos.x, positions.earthPos.y, positions.earthPos.z);
+				}
+				posAttr.setXYZ(1, 0, 0, 0);
+				if (positions.sunPos) {
+					posAttr.setXYZ(2, positions.sunPos.x, positions.sunPos.y, positions.sunPos.z);
+				}
+				posAttr.needsUpdate = true;
+				celestialLineRef.computeLineDistances();
+			}
 		}
 		targetEarthRotation = calculateEarthRotation(positions, baselineDatasetHour);
 		lastScrubTime = typeof performance !== 'undefined' ? performance.now() * 0.001 : 0;
@@ -752,6 +768,33 @@
 		earthMeshRef = earth;
 		earthGroupRef = earthGroup;
 
+		// 6b. Visual celestial alignment guide: dashed line connecting Earth, Moon (origin), and Sun
+		const celestialLineGeometry = new THREE.BufferGeometry();
+		celestialLineGeometry.setFromPoints([earthPos, new THREE.Vector3(0, 0, 0), sunPos]);
+		const celestialColors = new Float32Array([
+			0.2, 0.7, 1.0, // Earth: cyan-blue
+			1.0, 1.0, 1.0, // Moon: white
+			1.0, 0.7, 0.2  // Sun: warm gold
+		]);
+		celestialLineGeometry.setAttribute('color', new THREE.BufferAttribute(celestialColors, 3));
+
+		const celestialLineMat = new THREE.LineDashedMaterial({
+			vertexColors: true,
+			dashSize: 0.9,
+			gapSize: 0.5,
+			transparent: true,
+			opacity: 0.6,
+			depthTest: true,
+			depthWrite: false
+		});
+
+		const celestialLine = new THREE.Line(celestialLineGeometry, celestialLineMat);
+		celestialLine.computeLineDistances();
+		celestialLine.raycast = () => {}; // Purely visual, ignores raycasting
+		scene.add(celestialLine);
+		celestialLineRef = celestialLine;
+		celestialLineGeo = celestialLineGeometry;
+
 		if (lunarPositions) {
 			if (typeof lunarPositions.hour === 'number') {
 				baselineDatasetHour = lunarPositions.hour;
@@ -1225,6 +1268,11 @@
 			earth.geometry.dispose();
 			earth.material.dispose();
 			earthTexture.dispose();
+			scene.remove(celestialLine);
+			celestialLineGeometry.dispose();
+			celestialLineMat.dispose();
+			celestialLineRef = null;
+			celestialLineGeo = null;
 			sunMesh.geometry.dispose();
 			sunMesh.material.dispose();
 			innerCorona.material.dispose();
