@@ -609,7 +609,7 @@
           ></div>
         {/each}
 
-        <!-- Draggable Snapping Playhead (Group 4 from Figma #26:46) -->
+        <!-- Draggable Snapping Playhead (Group 4 from Figma #26:46 [nah i made that shi lol]) -->
         <!-- svelte-ignore a11y_no_static_element_interactions -->
         <div
           class="playhead {isDragging || isMovingKeys ? 'is-dragging' : ''}"
@@ -651,7 +651,7 @@
           type="range"
           class="scale-slider"
           min="1"
-          max="6"
+          max="12"
           step="0.1"
           bind:value={timelineScale}
           onpointerdown={(e) => e.stopPropagation()}
