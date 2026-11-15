@@ -1086,7 +1086,7 @@
 		position: absolute;
 		bottom: 64px;
 		left: 50%;
-		transform: translateX(-50%);
+		transform: translateX(-50%) translateZ(0);
 		padding: 10px 26px;
 		background: rgba(255, 255, 255, 0.08);
 		color: #ffffff;
@@ -1096,7 +1096,9 @@
 		font-size: 22px;
 		letter-spacing: 1px;
 		cursor: pointer;
+		-webkit-backdrop-filter: blur(8px);
 		backdrop-filter: blur(8px);
+		will-change: transform, backdrop-filter;
 		box-shadow: 0 0 16px rgba(255, 255, 255, 0.15);
 		transition: all 0.25s ease;
 		z-index: 10;
@@ -1122,7 +1124,10 @@
 		font-size: 22px;
 		letter-spacing: 1px;
 		cursor: pointer;
+		-webkit-backdrop-filter: blur(8px);
 		backdrop-filter: blur(8px);
+		transform: translateZ(0);
+		will-change: transform, backdrop-filter;
 		box-shadow: 0 0 16px rgba(255, 255, 255, 0.15);
 		transition: all 0.25s ease;
 		z-index: 10;
@@ -1140,7 +1145,10 @@
 		position: absolute;
 		inset: 0;
 		background: rgba(0, 0, 0, 0.65);
+		-webkit-backdrop-filter: blur(4px);
 		backdrop-filter: blur(4px);
+		transform: translateZ(0);
+		will-change: backdrop-filter;
 		display: flex;
 		align-items: center;
 		justify-content: center;
@@ -1157,8 +1165,9 @@
 		color: #ffffff;
 		font-family: "Jersey 25", sans-serif;
 		letter-spacing: 1px;
-		backdrop-filter: blur(14px);
 		-webkit-backdrop-filter: blur(14px);
+		backdrop-filter: blur(14px);
+		will-change: transform, backdrop-filter;
 		box-shadow: 0 0 30px rgba(0, 0, 0, 0.8), 0 0 20px rgba(255, 255, 255, 0.12);
 		display: flex;
 		flex-direction: column;
@@ -1196,7 +1205,10 @@
 		font-size: 18px;
 		letter-spacing: 1px;
 		cursor: pointer;
+		-webkit-backdrop-filter: blur(8px);
 		backdrop-filter: blur(8px);
+		transform: translateZ(0);
+		will-change: transform, backdrop-filter;
 		box-shadow: 0 0 10px rgba(255, 255, 255, 0.1);
 		transition: all 0.2s ease;
 	}

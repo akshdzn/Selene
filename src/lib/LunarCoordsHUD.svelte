@@ -894,8 +894,10 @@
     width: 423px;
     height: 58px;
     background: rgba(255, 255, 255, 0.1);
-    backdrop-filter: blur(10px);
     -webkit-backdrop-filter: blur(10px);
+    backdrop-filter: blur(10px);
+    transform: translateZ(0);
+    will-change: backdrop-filter;
     display: flex;
     align-items: center;
     position: relative;
@@ -1005,8 +1007,10 @@
     justify-content: center;
     border: 1px solid rgba(255, 255, 255, 0.3);
     background: rgba(10, 14, 24, 0.85);
-    backdrop-filter: blur(8px);
     -webkit-backdrop-filter: blur(8px);
+    backdrop-filter: blur(8px);
+    transform: translateZ(0);
+    will-change: backdrop-filter;
     font-size: 13px;
     font-family: sans-serif;
     cursor: pointer;
@@ -1131,8 +1135,9 @@
       rgba(10, 14, 24, 0.78) 0%,
       rgba(6, 9, 18, 0.68) 100%
     );
-    backdrop-filter: blur(16px) saturate(160%) brightness(1.05);
     -webkit-backdrop-filter: blur(16px) saturate(160%) brightness(1.05);
+    backdrop-filter: blur(16px) saturate(160%) brightness(1.05);
+    will-change: transform, backdrop-filter;
     border: 1px solid rgba(255, 255, 255, 0.16);
     border-top: 1px solid rgba(255, 255, 255, 0.28);
     border-radius: 4px;
@@ -1353,8 +1358,10 @@
     min-width: 395px;
     max-height: 240px;
     background: rgba(10, 14, 24, 0.94);
-    backdrop-filter: blur(20px) saturate(160%);
     -webkit-backdrop-filter: blur(20px) saturate(160%);
+    backdrop-filter: blur(20px) saturate(160%);
+    transform: translateZ(0);
+    will-change: backdrop-filter;
     border: 1px solid rgba(255, 255, 255, 0.22);
     border-radius: 3px;
     box-shadow:

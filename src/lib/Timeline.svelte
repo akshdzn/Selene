@@ -981,8 +981,10 @@
     width: 100%;
     height: 40px;
     background: rgba(255, 255, 255, 0.1);
-    backdrop-filter: blur(40px);
     -webkit-backdrop-filter: blur(40px);
+    backdrop-filter: blur(40px);
+    transform: translateZ(0);
+    will-change: backdrop-filter;
     border: 1px solid rgba(255, 255, 255, 0.15);
     box-sizing: border-box;
     cursor: pointer;
@@ -1145,8 +1147,10 @@
     height: 22px;
     padding: 0 8px;
     background: rgba(0, 0, 0, 0.55);
-    backdrop-filter: blur(20px);
     -webkit-backdrop-filter: blur(20px);
+    backdrop-filter: blur(20px);
+    transform: translateZ(0);
+    will-change: backdrop-filter;
     border: 1px solid rgba(255, 255, 255, 0.2);
     border-radius: 1px;
     box-sizing: border-box;

@@ -188,8 +188,10 @@
     justify-content: space-between;
     position: relative;
     background: rgba(255, 255, 255, 0.08);
-    backdrop-filter: blur(24px);
     -webkit-backdrop-filter: blur(24px);
+    backdrop-filter: blur(24px);
+    transform: translateZ(0);
+    will-change: backdrop-filter;
     border: 1px solid rgba(255, 255, 255, 0.15);
     border-radius: 0px;
     height: 44px;
@@ -282,8 +284,10 @@
   :global(.bits-calendar-popover) {
     z-index: 1000;
     background: rgba(12, 12, 12, 0.94);
-    backdrop-filter: blur(28px);
     -webkit-backdrop-filter: blur(28px);
+    backdrop-filter: blur(28px);
+    transform: translateZ(0);
+    will-change: backdrop-filter;
     border: 1px solid rgba(255, 255, 255, 0.2);
     box-shadow: 0 16px 40px rgba(0, 0, 0, 0.85), 0 0 1px rgba(255, 255, 255, 0.3);
     padding: 14px;

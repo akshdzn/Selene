@@ -573,8 +573,10 @@
     width: 100vw;
     height: 100vh;
     background: rgba(0, 0, 0, 0.55);
-    backdrop-filter: blur(6px);
     -webkit-backdrop-filter: blur(6px);
+    backdrop-filter: blur(6px);
+    transform: translateZ(0);
+    will-change: backdrop-filter;
     z-index: 9999;
     display: flex;
     align-items: center;
@@ -593,8 +595,9 @@
     max-height: 88vh;
     margin: auto;
     background: rgba(10, 14, 24, 0.75);
-    backdrop-filter: blur(20px) saturate(140%);
     -webkit-backdrop-filter: blur(20px) saturate(140%);
+    backdrop-filter: blur(20px) saturate(140%);
+    will-change: transform, backdrop-filter;
     border: 1px solid rgba(255, 255, 255, 0.18);
     border-radius: 6px;
     box-shadow: 0 4px 16px rgba(0, 0, 0, 0.35), inset 0 1px 0 rgba(255, 255, 255, 0.15);

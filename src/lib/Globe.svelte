@@ -1438,8 +1438,9 @@
 		border: 1px solid rgba(255, 255, 255, 0.45);
 		font-family: "Jersey 25", sans-serif;
 		letter-spacing: 1px;
-		backdrop-filter: blur(8px);
 		-webkit-backdrop-filter: blur(8px);
+		backdrop-filter: blur(8px);
+		will-change: transform, backdrop-filter;
 		box-shadow: 0 0 16px rgba(255, 255, 255, 0.15);
 		pointer-events: none;
 		z-index: 20;

@@ -620,8 +620,10 @@
     flex-direction: column;
     gap: 12px;
     background: rgba(10, 14, 24, 0.65);
-    backdrop-filter: blur(24px);
     -webkit-backdrop-filter: blur(24px);
+    backdrop-filter: blur(24px);
+    transform: translateZ(0);
+    will-change: backdrop-filter;
     border: 1px solid rgba(255, 255, 255, 0.16);
     padding: 14px;
     box-sizing: border-box;
@@ -721,7 +723,8 @@
     position: absolute;
     bottom: 50px;
     left: 50%;
-    transform: translateX(-50%);
+    transform: translateX(-50%) translateZ(0);
+    will-change: backdrop-filter;
     display: flex;
     align-items: center;
     gap: 30px;
@@ -733,8 +736,8 @@
     font-size: 15px;
     font-weight: 700;
     letter-spacing: 0.5px;
-    backdrop-filter: blur(20px);
     -webkit-backdrop-filter: blur(20px);
+    backdrop-filter: blur(20px);
     z-index: 10;
     pointer-events: none;
     user-select: none;
